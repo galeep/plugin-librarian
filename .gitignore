@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Generated files
+catalog.json
+similarity_report.json
