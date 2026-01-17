@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plugin-librarian"
+version = "0.1.0"
+description = "Navigate the Claude Code plugin ecosystem with awareness before install"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "datasketch>=1.6.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+librarian = "librarian.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["librarian*"]
