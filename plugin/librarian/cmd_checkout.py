@@ -40,14 +40,16 @@ def cmd_checkout(args):
             print(f"  Source: {checkout_info['source']}")
             print(f"  Timestamp: {checkout_info['timestamp']}")
 
-        if result.metadata and "_checkout" not in str(result.metadata):
+        # Show non-checkout metadata if there's any
+        non_checkout_keys = [k for k in result.metadata.keys() if k != "_checkout"]
+        if non_checkout_keys:
             print(f"\nMetadata extracted:")
-            for key, value in result.metadata.items():
-                if key != "_checkout":
-                    if isinstance(value, (list, dict)):
-                        print(f"  {key}: {json.dumps(value, indent=4)}")
-                    else:
-                        print(f"  {key}: {value}")
+            for key in non_checkout_keys:
+                value = result.metadata[key]
+                if isinstance(value, (list, dict)):
+                    print(f"  {key}: {json.dumps(value, indent=4)}")
+                else:
+                    print(f"  {key}: {value}")
 
         print(f"\nMetadata saved to: {result.target_path / '.librarian-checkout.json'}")
     else:

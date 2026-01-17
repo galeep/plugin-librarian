@@ -9,7 +9,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "plugin"))
 
-from librarian.checkout import find_skill_path, checkout_skill, CheckoutResult
+from librarian.checkout import find_skill_path, checkout_skill
 
 
 def test_checkout_single_file():
@@ -89,9 +89,10 @@ def test_checkout_flat_mode():
         assert result.success
         assert len(result.files_copied) > 0
 
-        # In flat mode, all files should be in the root directory
+        # In flat mode, all files should be in the root directory (no subdirs)
+        import os
         for file_path in result.files_copied:
-            assert "/" not in file_path, f"File not in flat structure: {file_path}"
+            assert os.sep not in file_path and "/" not in file_path, f"File not in flat structure: {file_path}"
 
         print(f"  Copied {len(result.files_copied)} files to flat structure")
         print("Test passed: checkout_flat_mode")

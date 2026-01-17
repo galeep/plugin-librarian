@@ -84,6 +84,8 @@ def find_skill_path(skill_spec: str) -> Optional[Path]:
     else:
         # Single name - search all marketplaces
         skill_name = parts[0]
+        if not MARKETPLACES_DIR.exists():
+            return None
         for mp in sorted(MARKETPLACES_DIR.iterdir()):
             if not mp.is_dir() or mp.name.startswith("."):
                 continue
@@ -135,6 +137,17 @@ def checkout_skill(
         if skill_path.is_file():
             # Single file checkout
             target_file = destination / skill_path.name
+            # Validate target stays within destination
+            try:
+                target_file.resolve().relative_to(destination.resolve())
+            except ValueError:
+                return CheckoutResult(
+                    success=False,
+                    target_path=destination,
+                    files_copied=[],
+                    metadata={},
+                    message=f"Invalid target path: would escape destination directory"
+                )
             shutil.copy2(skill_path, target_file)
             files_copied.append(str(target_file.relative_to(destination)))
 
@@ -151,17 +164,30 @@ def checkout_skill(
         else:
             # Directory checkout
             for item in skill_path.rglob("*"):
-                if item.is_file() and not any(part.startswith(".") for part in item.parts):
-                    # Skip hidden files and directories
-                    if preserve_structure:
-                        rel_path = item.relative_to(skill_path)
-                        target_file = destination / rel_path
-                        target_file.parent.mkdir(parents=True, exist_ok=True)
-                    else:
-                        target_file = destination / item.name
+                if not item.is_file():
+                    continue
+                # Check for hidden files/dirs relative to skill_path only
+                rel_path = item.relative_to(skill_path)
+                if any(part.startswith(".") for part in rel_path.parts):
+                    continue
 
-                    shutil.copy2(item, target_file)
-                    files_copied.append(str(target_file.relative_to(destination)))
+                if preserve_structure:
+                    target_file = destination / rel_path
+                    # Validate path stays within destination (prevent traversal)
+                    try:
+                        target_file.resolve().relative_to(destination.resolve())
+                    except ValueError:
+                        continue  # Skip files that would escape destination
+                    target_file.parent.mkdir(parents=True, exist_ok=True)
+                else:
+                    target_file = destination / item.name
+                    # In flat mode, track seen names to warn about overwrites
+                    if target_file.exists():
+                        # File already copied, skip duplicate
+                        continue
+
+                shutil.copy2(item, target_file)
+                files_copied.append(str(target_file.relative_to(destination)))
 
             # Try to extract metadata from SKILL.md or main file
             skill_md = skill_path / "SKILL.md"
