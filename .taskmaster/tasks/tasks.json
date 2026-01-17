@@ -9,9 +9,9 @@
         "testStrategy": "Create test suite with 139 known duplicate files from claude-scientific-skills vs ecosystem. Verify 0 files -> 136+ files in clusters. Test edge cases: 70%, 69%, 71% similarity. Measure recall >95% on known duplicates.",
         "priority": "high",
         "dependencies": [],
-        "status": "review",
+        "status": "done",
         "subtasks": [],
-        "updatedAt": "2026-01-17T17:47:56.499Z"
+        "updatedAt": "2026-01-17T22:23:08.703Z"
       },
       {
         "id": "2",
@@ -21,9 +21,9 @@
         "testStrategy": "Test with large datasets (1000+ files): verify flags trigger on 0% overlap, extreme ratios. Validate confidence indicators scale with dataset size. Check warning messages appear in CLI/JSON output.",
         "priority": "medium",
         "dependencies": [],
-        "status": "review",
+        "status": "done",
         "subtasks": [],
-        "updatedAt": "2026-01-17T17:47:56.501Z"
+        "updatedAt": "2026-01-17T22:23:08.705Z"
       },
       {
         "id": "3",
@@ -35,8 +35,9 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-17T22:23:08.707Z"
       },
       {
         "id": "4",
@@ -48,8 +49,9 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-17T22:23:08.710Z"
       },
       {
         "id": "5",
@@ -117,8 +119,9 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-17T22:23:08.712Z"
       },
       {
         "id": "10",
@@ -130,8 +133,9 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-17T22:23:08.714Z"
       },
       {
         "id": "11",
@@ -153,9 +157,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-01-17T17:47:56.502Z",
+      "lastModified": "2026-01-17T22:23:08.714Z",
       "taskCount": 11,
-      "completedCount": 0,
+      "completedCount": 6,
       "tags": [
         "master"
       ]
