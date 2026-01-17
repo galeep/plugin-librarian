@@ -248,3 +248,43 @@ def find_plugin_in_marketplace(marketplace: Path, plugin_name: str) -> Optional[
                     return plugin_path
 
     return None
+
+
+def load_baseline_files(spec: str) -> list[FileInfo]:
+    """Load files from a baseline specification.
+
+    Args:
+        spec: One of:
+            - "installed" - currently installed plugins
+            - "marketplace-name" - entire marketplace
+            - "marketplace/plugin" - specific plugin
+
+    Returns:
+        List of FileInfo with MinHash signatures computed.
+
+    Raises:
+        ValueError: If marketplace or plugin not found.
+    """
+    if spec == "installed":
+        plugins = load_installed_plugins()
+        files = []
+        for plugin in plugins:
+            label = f"{plugin.name}@{plugin.marketplace}"
+            files.extend(scan_directory_for_content(plugin.install_path, label))
+        return files
+
+    parts = spec.split("/", 1)
+    marketplace_name = parts[0]
+    plugin_name = parts[1] if len(parts) > 1 else None
+
+    marketplace_path = find_marketplace_path(marketplace_name)
+    if not marketplace_path:
+        raise ValueError(f"Marketplace not found: {marketplace_name}")
+
+    if plugin_name:
+        plugin_path = find_plugin_in_marketplace(marketplace_path, plugin_name)
+        if not plugin_path:
+            raise ValueError(f"Plugin not found: {plugin_name} in {marketplace_name}")
+        return scan_directory_for_content(plugin_path, spec)
+    else:
+        return scan_directory_for_content(marketplace_path, marketplace_name)
