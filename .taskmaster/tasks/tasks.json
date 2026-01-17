@@ -1,0 +1,158 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Fix MinHash/LSH Similarity Detection Algorithm",
+        "description": "Implement fix for similarity clustering algorithm to detect files with >70% similarity across marketplaces, addressing GitHub #11",
+        "details": "Debug MinHash/LSH implementation to correctly identify 98% identical files. Adjust threshold logic, improve shingling for Claude Code plugins, ensure cross-marketplace indexing works. Add known duplicate test data (136/139 skills). Use datasketch library for MinHashLSH with bands/buckets optimized for 70% Jaccard similarity threshold.",
+        "testStrategy": "Create test suite with 139 known duplicate files from claude-scientific-skills vs ecosystem. Verify 0 files -> 136+ files in clusters. Test edge cases: 70%, 69%, 71% similarity. Measure recall >95% on known duplicates.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Add Sanity Checks for Similarity Results",
+        "description": "Implement statistical improbability detection and confidence indicators for similarity results, GitHub #12",
+        "details": "Add validation rules: flag 0% cluster membership when >1000 clusters exist; warn on similarity ratios <5% or >95% for datasets >500 files. Compute confidence scores based on dataset size, cluster density. Output JSON with 'confidence' and 'warnings' fields.",
+        "testStrategy": "Test with large datasets (1000+ files): verify flags trigger on 0% overlap, extreme ratios. Validate confidence indicators scale with dataset size. Check warning messages appear in CLI/JSON output.",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Implement Progress Feedback for Long Operations",
+        "description": "Add progress bars and ETA for scanning/indexing operations, GitHub #2",
+        "details": "Use tqdm or rich progress bars for file scanning, MinHash computation, LSH indexing. Track files processed/total, estimate ETA based on avg processing time. Add completion messages. Integrate with all long-running CLI commands.",
+        "testStrategy": "Run on 1000+ file datasets, verify progress updates every 10-50 files, ETA accuracy within 20%, completion message appears. Test interrupt handling preserves partial progress.",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Add Content Diff View for Similar Files",
+        "description": "Display meaningful differences between similar files beyond similarity percentage, GitHub #3",
+        "details": "Integrate difflib or rich.diff for side-by-side file comparison. Ignore whitespace/formatting differences using normalize_whitespace(). Highlight semantic changes (function names, logic). Output to terminal with color coding and JSON diff format.",
+        "testStrategy": "Test pairs with 70-99% similarity: verify diff ignores whitespace, highlights code changes. Validate 95%+ identical files show minimal diff. Check terminal rendering and JSON export.",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Implement Marketplace-to-Marketplace Comparison",
+        "description": "Add command to directly compare two marketplaces (A vs B) showing overlap/unique content, GitHub #1",
+        "details": "New CLI command: `plugin-librarian compare --marketplace-a <A> --marketplace-b <B>`. Compute intersection (shared clusters), A-only, B-only using set operations on LSH fingerprints. Output Venn diagram stats and top overlaps.",
+        "testStrategy": "Test known overlapping marketplaces: verify shared/unique counts match manual inspection. Edge case: identical marketplaces (100% overlap), disjoint (0% overlap). Performance test on large datasets.",
+        "priority": "medium",
+        "dependencies": [
+          1,
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Add Marketplace-Level Similarity Queries",
+        "description": "Enable similarity analysis aggregated at marketplace level rather than individual files, GitHub #4",
+        "details": "Aggregate file-level clusters by marketplace_id. Compute marketplace similarity matrix using average/weighted cluster overlap. New output mode: `--marketplace-level`. Generate heatmap or similarity scores between all marketplace pairs.",
+        "testStrategy": "Verify aggregation: marketplace scores match file-level averages. Test with known marketplace overlaps. Validate matrix symmetry and diagonal=1.0.",
+        "priority": "low",
+        "dependencies": [
+          1,
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Improve similarity_report.json Structure and Queryability",
+        "description": "Restructure JSON output for better programmatic access and querying, GitHub #5",
+        "details": "Flatten nested structures, add marketplace/file indices, similarity_matrix field, cluster_membership array. Follow JSON Schema best practices. Add jq-friendly paths. Include metadata (threshold, timestamp, confidence).",
+        "testStrategy": "Validate JSON schema compliance. Test jq queries for common use cases (clusters by marketplace, top similarities). Verify backward compatibility with existing parsers.",
+        "priority": "low",
+        "dependencies": [
+          1,
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Implement Semantic Capability Search",
+        "description": "Add search by skill functionality/capability using semantic analysis, GitHub #6",
+        "details": "Extract capability descriptions from skill metadata/code comments using regex/NLP. Use sentence-transformers for semantic embeddings. Add `--semantic-search 'query'` command with cosine similarity ranking. Index capabilities during scan.",
+        "testStrategy": "Test queries like 'scientific computing', 'data analysis' return relevant skills. Verify ranking correlates with manual relevance. Performance test on full ecosystem.",
+        "priority": "low",
+        "dependencies": [
+          1,
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Add Describe Command for Skill Introspection",
+        "description": "Create `describe` command to analyze and summarize individual skills, GitHub #7",
+        "details": "Parse skill file: extract name, description, dependencies, capabilities from code/metadata. Generate human-readable summary. Detect input/output types, complexity score. Output formatted CLI view and JSON.",
+        "testStrategy": "Test on diverse skills: verify extracts correct metadata, generates accurate summaries. Edge cases: minimal skills, complex multi-function skills.",
+        "priority": "low",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Implement Checkout Command for Local Skill Copy",
+        "description": "Add command to download/copy skills for local development/modification, GitHub #8",
+        "details": "`plugin-librarian checkout <skill_id> [dir]`. Clone from marketplace repo or download raw files. Preserve metadata. Handle multiple versions if available. Add to local cache for offline work.",
+        "testStrategy": "Verify downloads complete files with correct metadata. Test from different marketplaces. Validate local cache works offline. Check file permissions/ownership.",
+        "priority": "low",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Extract Shared Core Architecture for Plugin Toolkit",
+        "description": "Refactor common components into shared core library for plugin-toolkit ecosystem, GitHub #9",
+        "details": "Identify shared modules: MinHashLSH, marketplace parsers, CLI framework, JSON schemas. Create `plugin-librarian-core` package. Update main tool to use core. Design for extensibility (custom marketplaces, similarity metrics).",
+        "testStrategy": "Verify core library passes all existing tests independently. Test main tool uses core without regression. Validate extensibility with mock marketplace.",
+        "priority": "low",
+        "dependencies": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2026-01-17T17:19:30.135Z",
+      "updated": "2026-01-17T17:19:30.135Z",
+      "description": "Tasks for master context"
+    }
+  }
+}
