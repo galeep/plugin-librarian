@@ -964,11 +964,13 @@ def cmd_marketplace_level(args):
     n = len(marketplaces)
 
     if n == 0:
-        print("No marketplaces found in index.")
+        print("No marketplaces found in index.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Computing similarity matrix for {n} marketplaces...")
-    print()
+    # Use stderr for progress when JSON output is requested
+    progress_out = sys.stderr if getattr(args, 'json', False) else sys.stdout
+    print(f"Computing similarity matrix for {n} marketplaces...", file=progress_out)
+    print(file=progress_out)
 
     # Compute pairwise similarity matrix
     # Using Jaccard similarity on shared clusters

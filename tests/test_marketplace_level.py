@@ -2,6 +2,7 @@
 """Tests for marketplace-level similarity analysis."""
 
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -83,6 +84,23 @@ def create_mock_report(marketplaces_data):
     }
 
 
+def run_with_mock_report(report, args):
+    """Run cmd_marketplace_level with a mock report, handling temp file cleanup.
+
+    Returns:
+        List of print call arguments
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        report_path = Path(tmpdir) / "report.json"
+        with open(report_path, 'w') as f:
+            json.dump(report, f)
+
+        with patch('librarian.cli.SIMILARITY_REPORT', report_path):
+            with patch('builtins.print') as mock_print:
+                cmd_marketplace_level(args)
+                return mock_print.call_args_list
+
+
 def test_identical_marketplaces():
     """Test marketplaces with identical cluster membership (100% Jaccard)."""
     print("Testing identical marketplaces...")
@@ -97,22 +115,16 @@ def test_identical_marketplaces():
     args.json = True
     args.heatmap = False
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(report, f)
-        f.flush()
+    call_list = run_with_mock_report(report, args)
 
-        with patch('librarian.cli.SIMILARITY_REPORT', Path(f.name)):
-            with patch('builtins.print') as mock_print:
-                cmd_marketplace_level(args)
+    # Get the JSON output (last print call)
+    output = call_list[-1][0][0]
+    result = json.loads(output)
 
-                # Get the JSON output
-                output = mock_print.call_args_list[-1][0][0]
-                result = json.loads(output)
-
-                # Check that mp-a and mp-b have 100% similarity
-                assert result["similarity_matrix"]["mp-a"]["mp-b"] == 1.0
-                assert result["similarity_matrix"]["mp-b"]["mp-a"] == 1.0
-                print("[PASS] Identical marketplaces have 100% similarity")
+    # Check that mp-a and mp-b have 100% similarity
+    assert result["similarity_matrix"]["mp-a"]["mp-b"] == 1.0
+    assert result["similarity_matrix"]["mp-b"]["mp-a"] == 1.0
+    print("[PASS] Identical marketplaces have 100% similarity")
 
 
 def test_disjoint_marketplaces():
@@ -129,21 +141,14 @@ def test_disjoint_marketplaces():
     args.json = True
     args.heatmap = False
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(report, f)
-        f.flush()
+    call_list = run_with_mock_report(report, args)
+    output = call_list[-1][0][0]
+    result = json.loads(output)
 
-        with patch('librarian.cli.SIMILARITY_REPORT', Path(f.name)):
-            with patch('builtins.print') as mock_print:
-                cmd_marketplace_level(args)
-
-                output = mock_print.call_args_list[-1][0][0]
-                result = json.loads(output)
-
-                # Check that mp-a and mp-b have 0% similarity
-                assert result["similarity_matrix"]["mp-a"]["mp-b"] == 0.0
-                assert result["similarity_matrix"]["mp-b"]["mp-a"] == 0.0
-                print("[PASS] Disjoint marketplaces have 0% similarity")
+    # Check that mp-a and mp-b have 0% similarity
+    assert result["similarity_matrix"]["mp-a"]["mp-b"] == 0.0
+    assert result["similarity_matrix"]["mp-b"]["mp-a"] == 0.0
+    print("[PASS] Disjoint marketplaces have 0% similarity")
 
 
 def test_partial_overlap():
@@ -160,20 +165,13 @@ def test_partial_overlap():
     args.json = True
     args.heatmap = False
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(report, f)
-        f.flush()
+    call_list = run_with_mock_report(report, args)
+    output = call_list[-1][0][0]
+    result = json.loads(output)
 
-        with patch('librarian.cli.SIMILARITY_REPORT', Path(f.name)):
-            with patch('builtins.print') as mock_print:
-                cmd_marketplace_level(args)
-
-                output = mock_print.call_args_list[-1][0][0]
-                result = json.loads(output)
-
-                # Jaccard = |intersection| / |union| = 2 / 4 = 0.5
-                assert result["similarity_matrix"]["mp-a"]["mp-b"] == 0.5
-                print("[PASS] Partial overlap calculates correct Jaccard similarity")
+    # Jaccard = |intersection| / |union| = 2 / 4 = 0.5
+    assert result["similarity_matrix"]["mp-a"]["mp-b"] == 0.5
+    print("[PASS] Partial overlap calculates correct Jaccard similarity")
 
 
 def test_matrix_symmetry():
@@ -190,27 +188,20 @@ def test_matrix_symmetry():
     args.json = True
     args.heatmap = False
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(report, f)
-        f.flush()
+    call_list = run_with_mock_report(report, args)
+    output = call_list[-1][0][0]
+    result = json.loads(output)
 
-        with patch('librarian.cli.SIMILARITY_REPORT', Path(f.name)):
-            with patch('builtins.print') as mock_print:
-                cmd_marketplace_level(args)
+    matrix = result["similarity_matrix"]
+    marketplaces = result["marketplaces"]
 
-                output = mock_print.call_args_list[-1][0][0]
-                result = json.loads(output)
+    # Check symmetry: matrix[a][b] == matrix[b][a]
+    for mp_a in marketplaces:
+        for mp_b in marketplaces:
+            assert matrix[mp_a][mp_b] == matrix[mp_b][mp_a], \
+                f"Matrix not symmetric: [{mp_a}][{mp_b}] != [{mp_b}][{mp_a}]"
 
-                matrix = result["similarity_matrix"]
-                marketplaces = result["marketplaces"]
-
-                # Check symmetry: matrix[a][b] == matrix[b][a]
-                for mp_a in marketplaces:
-                    for mp_b in marketplaces:
-                        assert matrix[mp_a][mp_b] == matrix[mp_b][mp_a], \
-                            f"Matrix not symmetric: [{mp_a}][{mp_b}] != [{mp_b}][{mp_a}]"
-
-                print("[PASS] Similarity matrix is symmetric")
+    print("[PASS] Similarity matrix is symmetric")
 
 
 def test_diagonal_is_one():
@@ -226,24 +217,17 @@ def test_diagonal_is_one():
     args.json = True
     args.heatmap = False
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(report, f)
-        f.flush()
+    call_list = run_with_mock_report(report, args)
+    output = call_list[-1][0][0]
+    result = json.loads(output)
 
-        with patch('librarian.cli.SIMILARITY_REPORT', Path(f.name)):
-            with patch('builtins.print') as mock_print:
-                cmd_marketplace_level(args)
+    matrix = result["similarity_matrix"]
 
-                output = mock_print.call_args_list[-1][0][0]
-                result = json.loads(output)
+    # Check diagonal
+    for mp in result["marketplaces"]:
+        assert matrix[mp][mp] == 1.0, f"Diagonal not 1.0 for {mp}"
 
-                matrix = result["similarity_matrix"]
-
-                # Check diagonal
-                for mp in result["marketplaces"]:
-                    assert matrix[mp][mp] == 1.0, f"Diagonal not 1.0 for {mp}"
-
-                print("[PASS] Diagonal elements are 1.0")
+    print("[PASS] Diagonal elements are 1.0")
 
 
 def test_text_output():
@@ -259,23 +243,16 @@ def test_text_output():
     args.json = False
     args.heatmap = False
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(report, f)
-        f.flush()
+    call_list = run_with_mock_report(report, args)
+    output = " ".join(str(call.args[0]) if call.args else "" for call in call_list)
 
-        with patch('librarian.cli.SIMILARITY_REPORT', Path(f.name)):
-            with patch('builtins.print') as mock_print:
-                cmd_marketplace_level(args)
+    # Check expected content
+    assert "MARKETPLACE SIMILARITY MATRIX" in output
+    assert "Marketplace Statistics" in output
+    assert "mp-a" in output
+    assert "mp-b" in output
 
-                output = " ".join(str(call.args[0]) if call.args else "" for call in mock_print.call_args_list)
-
-                # Check expected content
-                assert "MARKETPLACE SIMILARITY MATRIX" in output
-                assert "Marketplace Statistics" in output
-                assert "mp-a" in output
-                assert "mp-b" in output
-
-                print("[PASS] Text output contains expected content")
+    print("[PASS] Text output contains expected content")
 
 
 def test_heatmap_output():
@@ -292,21 +269,14 @@ def test_heatmap_output():
     args.json = False
     args.heatmap = True
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(report, f)
-        f.flush()
+    call_list = run_with_mock_report(report, args)
+    output = " ".join(str(call.args[0]) if call.args else "" for call in call_list)
 
-        with patch('librarian.cli.SIMILARITY_REPORT', Path(f.name)):
-            with patch('builtins.print') as mock_print:
-                cmd_marketplace_level(args)
+    # Check heatmap legend
+    assert "Legend" in output
+    assert "██" in output or "Heatmap" in output
 
-                output = " ".join(str(call.args[0]) if call.args else "" for call in mock_print.call_args_list)
-
-                # Check heatmap legend
-                assert "Legend" in output
-                assert "██" in output or "Heatmap" in output
-
-                print("[PASS] Heatmap output generated")
+    print("[PASS] Heatmap output generated")
 
 
 def test_top_pairs_sorted():
@@ -324,28 +294,21 @@ def test_top_pairs_sorted():
     args.json = True
     args.heatmap = False
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(report, f)
-        f.flush()
+    call_list = run_with_mock_report(report, args)
+    output = call_list[-1][0][0]
+    result = json.loads(output)
 
-        with patch('librarian.cli.SIMILARITY_REPORT', Path(f.name)):
-            with patch('builtins.print') as mock_print:
-                cmd_marketplace_level(args)
+    top_pairs = result["top_pairs"]
 
-                output = mock_print.call_args_list[-1][0][0]
-                result = json.loads(output)
+    # Verify sorted descending by similarity
+    for i in range(len(top_pairs) - 1):
+        assert top_pairs[i]["similarity"] >= top_pairs[i+1]["similarity"], \
+            "Top pairs not sorted by similarity"
 
-                top_pairs = result["top_pairs"]
+    # The highest similarity pair should be mp-a/mp-b (100%)
+    assert top_pairs[0]["similarity"] == 1.0
 
-                # Verify sorted descending by similarity
-                for i in range(len(top_pairs) - 1):
-                    assert top_pairs[i]["similarity"] >= top_pairs[i+1]["similarity"], \
-                        "Top pairs not sorted by similarity"
-
-                # The highest similarity pair should be mp-a/mp-b (100%)
-                assert top_pairs[0]["similarity"] == 1.0
-
-                print("[PASS] Top pairs sorted correctly")
+    print("[PASS] Top pairs sorted correctly")
 
 
 def test_no_index_error():
@@ -410,26 +373,19 @@ def test_old_format_fallback():
     args.json = True
     args.heatmap = False
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(old_report, f)
-        f.flush()
+    call_list = run_with_mock_report(old_report, args)
+    output = call_list[-1][0][0]
+    result = json.loads(output)
 
-        with patch('librarian.cli.SIMILARITY_REPORT', Path(f.name)):
-            with patch('builtins.print') as mock_print:
-                cmd_marketplace_level(args)
+    # Should have found both marketplaces
+    assert "mp-a" in result["marketplaces"]
+    assert "mp-b" in result["marketplaces"]
 
-                output = mock_print.call_args_list[-1][0][0]
-                result = json.loads(output)
+    # mp-a has clusters 0, 1; mp-b has cluster 0
+    # Jaccard = 1 / 2 = 0.5
+    assert result["similarity_matrix"]["mp-a"]["mp-b"] == 0.5
 
-                # Should have found both marketplaces
-                assert "mp-a" in result["marketplaces"]
-                assert "mp-b" in result["marketplaces"]
-
-                # mp-a has clusters 0, 1; mp-b has cluster 0
-                # Jaccard = 1 / 2 = 0.5
-                assert result["similarity_matrix"]["mp-a"]["mp-b"] == 0.5
-
-                print("[PASS] Old format fallback works correctly")
+    print("[PASS] Old format fallback works correctly")
 
 
 if __name__ == "__main__":
