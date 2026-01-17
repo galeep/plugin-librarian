@@ -105,9 +105,25 @@ class LocationIndex:
         with open(report_path) as fh:
             report = json.load(fh)
 
-        self.total_files = report["summary"]["total_files_scanned"]
+        # Handle both old and new JSON formats
+        if "metadata" in report:
+            # New format
+            self.total_files = report["summary"]["total_files_scanned"]
+            # Use pre-built indices if available
+            if "marketplace_index" in report and "filename_index" in report:
+                self.by_marketplace = defaultdict(list, report["marketplace_index"])
+                self.by_filename = defaultdict(list, report["filename_index"])
+        else:
+            # Old format
+            self.total_files = report["summary"]["total_files_scanned"]
 
         for idx, cluster_data in enumerate(report["clusters"]):
+            # Handle both old format (no cluster_id) and new format (has cluster_id)
+            cluster_id = cluster_data.get("cluster_id")
+            if cluster_id is None or isinstance(cluster_id, str):
+                # Old format doesn't have cluster_id, use array index
+                cluster_id = idx
+
             locations = [
                 Location(
                     marketplace=loc["marketplace"],
@@ -119,7 +135,7 @@ class LocationIndex:
             ]
 
             cluster = ClusterInfo(
-                cluster_id=idx,
+                cluster_id=cluster_id,
                 cluster_type=cluster_data["type"],
                 size=cluster_data["size"],
                 avg_similarity=cluster_data["avg_similarity"],
@@ -128,20 +144,24 @@ class LocationIndex:
                 locations=locations,
             )
 
-            self.clusters[idx] = cluster
+            self.clusters[cluster_id] = cluster
 
-            for loc in locations:
-                self.by_filename[loc.filename].append(idx)
+            # Only build indices manually if not using pre-built ones
+            if "metadata" not in report or "marketplace_index" not in report:
+                for loc in locations:
+                    self.by_filename[loc.filename].append(cluster_id)
 
-            for mp in cluster_data["marketplaces"]:
-                self.by_marketplace[mp].append(idx)
+                for mp in cluster_data["marketplaces"]:
+                    self.by_marketplace[mp].append(cluster_id)
 
         self.total_clusters = len(self.clusters)
 
-        for filename in self.by_filename:
-            self.by_filename[filename] = list(set(self.by_filename[filename]))
-        for mp in self.by_marketplace:
-            self.by_marketplace[mp] = list(set(self.by_marketplace[mp]))
+        # Deduplicate if we built indices manually
+        if "metadata" not in report or "marketplace_index" not in report:
+            for filename in self.by_filename:
+                self.by_filename[filename] = list(set(self.by_filename[filename]))
+            for mp in self.by_marketplace:
+                self.by_marketplace[mp] = list(set(self.by_marketplace[mp]))
 
     def where(self, query: str) -> list[tuple[ClusterInfo, list[Location]]]:
         results = []
@@ -1208,6 +1228,7 @@ def cmd_describe(args):
 
 def cmd_scan(args):
     """Scan marketplaces and build similarity index."""
+    from datetime import datetime, timezone
     from datasketch import MinHash, MinHashLSH
     from .core import tokenize, compute_minhash, FileInfo
 
@@ -1282,6 +1303,16 @@ def cmd_scan(args):
     assigned = set()
     clusters = []
 
+    # DESIGN RATIONALE: Build indices for fast lookups
+    # These indices enable O(1) lookups by marketplace and filename
+    # instead of scanning the entire cluster array
+    file_index = []  # Array of all files with their cluster membership
+    marketplace_index = defaultdict(list)  # marketplace -> list of cluster IDs
+    filename_index = defaultdict(list)  # filename -> list of cluster IDs
+
+    # Build cluster membership map
+    file_to_cluster = {}  # file_index -> cluster_id
+
     for i, f in enumerate(files):
         if i in assigned or f.minhash is None:
             continue
@@ -1290,13 +1321,27 @@ def cmd_scan(args):
         similar_indices = [int(r) for r in result]
 
         if len(similar_indices) > 1:
-            cluster_files = [files[j] for j in similar_indices if files[j].minhash is not None]
+            cluster_id = len(clusters)
+            # Filter both indices and files together to maintain alignment
+            filtered = [(j, files[j]) for j in similar_indices if files[j].minhash is not None]
+            similar_indices = [pair[0] for pair in filtered]
+            cluster_files = [pair[1] for pair in filtered]
 
+            # Calculate pairwise similarities for similarity matrix
             similarities = []
+            similarity_pairs = []
             for j, f1 in enumerate(cluster_files):
-                for f2 in cluster_files[j+1:]:
+                for k, f2 in enumerate(cluster_files[j+1:], start=j+1):
                     sim = f1.minhash.jaccard(f2.minhash)
                     similarities.append(sim)
+                    # Store file indices for similarity matrix
+                    idx1 = similar_indices[j]
+                    idx2 = similar_indices[k]
+                    similarity_pairs.append({
+                        "file1_index": idx1,
+                        "file2_index": idx2,
+                        "similarity": round(sim, 3),
+                    })
 
             avg_sim = sum(similarities) / len(similarities) if similarities else 0
 
@@ -1311,30 +1356,59 @@ def cmd_scan(args):
             else:
                 cluster_type = "cross-marketplace"
 
+            # Build location list with file indices
+            locations = []
+            for idx, f in zip(similar_indices, cluster_files):
+                locations.append({
+                    "file_index": idx,
+                    "marketplace": f.marketplace,
+                    "plugin": f.plugin,
+                    "path": f.relative_path,
+                    "is_official": f.is_official,
+                })
+                # Update indices
+                file_to_cluster[idx] = cluster_id
+                marketplace_index[f.marketplace].append(cluster_id)
+                filename_index[Path(f.relative_path).name].append(cluster_id)
+
             clusters.append({
+                "cluster_id": cluster_id,
                 "type": cluster_type,
                 "size": len(cluster_files),
                 "avg_similarity": round(avg_sim, 3),
                 "has_official": any(f.is_official for f in cluster_files),
                 "marketplaces": sorted(marketplaces),
-                "locations": [
-                    {
-                        "marketplace": f.marketplace,
-                        "plugin": f.plugin,
-                        "path": f.relative_path,
-                        "is_official": f.is_official,
-                    }
-                    for f in cluster_files
-                ],
+                "locations": locations,
+                "similarity_pairs": similarity_pairs,
             })
 
             assigned.update(similar_indices)
 
     clusters.sort(key=lambda c: c["size"], reverse=True)
 
+    # Build file index with cluster membership
+    for i, f in enumerate(files):
+        file_entry = {
+            "file_index": i,
+            "marketplace": f.marketplace,
+            "plugin": f.plugin,
+            "path": f.relative_path,
+            "filename": Path(f.relative_path).name,
+            "is_official": f.is_official,
+            "cluster_id": file_to_cluster.get(i, None),
+            "in_cluster": i in file_to_cluster,
+        }
+        file_index.append(file_entry)
+
+    # Deduplicate marketplace and filename indices
+    for mp in marketplace_index:
+        marketplace_index[mp] = sorted(list(set(marketplace_index[mp])))
+    for fn in filename_index:
+        filename_index[fn] = sorted(list(set(filename_index[fn])))
+
     by_type = defaultdict(list)
     for c in clusters:
-        by_type[c["type"]].append(c)
+        by_type[c["type"]].append(c["cluster_id"])
 
     total_in_clusters = sum(c["size"] for c in clusters)
     unclustered = len(files) - total_in_clusters
@@ -1347,22 +1421,41 @@ def cmd_scan(args):
         total_clusters=len(clusters),
     )
 
+    # DESIGN RATIONALE: Restructured JSON for better queryability
+    # - metadata at top level for quick access
+    # - file_index for O(1) lookups by file
+    # - marketplace_index for fast marketplace filtering
+    # - filename_index for fast filename lookups
+    # - clusters remain detailed but with file_index references
+    # This structure enables efficient jq queries like:
+    #   .file_index[] | select(.marketplace == "X")
+    #   .marketplace_index["X"] as $ids | .clusters[] | select(.cluster_id | IN($ids[]))
     output = {
+        "metadata": {
+            "version": "2.0",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "similarity_threshold": SIMILARITY_THRESHOLD,
+            "num_permutations": NUM_PERM,
+            "confidence": sanity_result.confidence,
+            "warnings": sanity_result.warnings,
+        },
         "summary": {
             "total_files_scanned": len(files),
             "files_in_clusters": total_in_clusters,
+            "unclustered_files": unclustered,
             "unique_clusters": len(clusters),
-            "similarity_threshold": SIMILARITY_THRESHOLD,
-            "confidence": sanity_result.confidence,
-            "warnings": sanity_result.warnings,
+            "unique_marketplaces": len(marketplace_index),
             "by_type": {
                 ctype: {
                     "clusters": len(by_type.get(ctype, [])),
-                    "files": sum(c["size"] for c in by_type.get(ctype, [])),
+                    "files": sum(c["size"] for c in clusters if c["cluster_id"] in by_type.get(ctype, [])),
                 }
                 for ctype in ["cross-marketplace", "internal", "scaffold"]
             },
         },
+        "file_index": file_index,
+        "marketplace_index": dict(marketplace_index),
+        "filename_index": dict(filename_index),
         "clusters": clusters,
     }
 
