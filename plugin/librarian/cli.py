@@ -312,11 +312,23 @@ def cmd_compare_marketplaces(args):
     print(f"  {marketplace_b} total files:        {total_b}")
     print()
     print(f"  Shared (overlap):           {shared_count} files")
-    print(f"    {marketplace_a} overlap %:        {shared_count/total_a*100:.1f}%" if total_a > 0 else "  A overlap %: N/A")
-    print(f"    {marketplace_b} overlap %:        {shared_count/total_b*100:.1f}%" if total_b > 0 else "  B overlap %: N/A")
+    if total_a > 0:
+        print(f"    {marketplace_a} overlap %:        {shared_count/total_a*100:.1f}%")
+    else:
+        print(f"    {marketplace_a} overlap %:        N/A")
+    if total_b > 0:
+        print(f"    {marketplace_b} overlap %:        {shared_count/total_b*100:.1f}%")
+    else:
+        print(f"    {marketplace_b} overlap %:        N/A")
     print()
-    print(f"  {marketplace_a} only (unique):      {a_only_count} files ({a_only_count/total_a*100:.1f}%)" if total_a > 0 else f"  {marketplace_a} only: 0 files")
-    print(f"  {marketplace_b} only (unique):      {b_only_count} files ({b_only_count/total_b*100:.1f}%)" if total_b > 0 else f"  {marketplace_b} only: 0 files")
+    if total_a > 0:
+        print(f"  {marketplace_a} only (unique):      {a_only_count} files ({a_only_count/total_a*100:.1f}%)")
+    else:
+        print(f"  {marketplace_a} only (unique):      0 files")
+    if total_b > 0:
+        print(f"  {marketplace_b} only (unique):      {b_only_count} files ({b_only_count/total_b*100:.1f}%)")
+    else:
+        print(f"  {marketplace_b} only (unique):      0 files")
     print()
 
     # Edge cases
