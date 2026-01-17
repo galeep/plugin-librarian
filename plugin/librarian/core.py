@@ -3,12 +3,22 @@
 import hashlib
 import json
 import re
+import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 from datasketch import MinHash, MinHashLSH
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TaskProgressColumn,
+    TimeRemainingColumn,
+    TimeElapsedColumn,
+)
 
 
 # Paths
@@ -211,7 +221,6 @@ def load_installed_plugins() -> list[InstalledPlugin]:
 
 def scan_directory_for_content(directory: Path, label: str = "") -> list[FileInfo]:
     """Scan a directory for content files with MinHash signatures."""
-    import sys
     files = []
 
     for md_file in directory.rglob("*.md"):
@@ -399,3 +408,159 @@ def check_similarity_sanity(
                 confidence = "medium"
 
     return SanityCheckResult(confidence=confidence, warnings=warnings)
+
+
+# ============================================================================
+# Progress utilities for long-running operations
+# ============================================================================
+
+def create_progress_bar() -> Progress:
+    """Create a standardized progress bar for librarian operations.
+
+    Returns:
+        Progress instance configured with spinner, bar, percentage, and time remaining.
+    """
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeRemainingColumn(),
+        TimeElapsedColumn(),
+    )
+
+
+def scan_directory_for_content_with_progress(
+    directory: Path,
+    label: str = "",
+    progress: Optional[Progress] = None,
+    task_id: Optional[int] = None,
+) -> list[FileInfo]:
+    """Scan a directory for content files with MinHash signatures and optional progress tracking.
+
+    Args:
+        directory: Directory to scan
+        label: Label for marketplace/plugin name
+        progress: Optional Progress instance for tracking
+        task_id: Optional task ID if using existing progress bar
+
+    Returns:
+        List of FileInfo objects with computed MinHash signatures
+    """
+    files = []
+
+    # First pass: collect all markdown files
+    md_files = [
+        md_file for md_file in directory.rglob("*.md")
+        if "backup" not in str(md_file).lower()
+    ]
+
+    if not md_files:
+        return files
+
+    # Process files with progress tracking
+    for md_file in md_files:
+        try:
+            content = md_file.read_text(encoding="utf-8", errors="replace")
+            if len(content) < 100:
+                continue
+
+            rel_path = md_file.relative_to(directory)
+
+            file_info = FileInfo(
+                marketplace=label,
+                plugin=directory.name,
+                relative_path=str(rel_path),
+                full_path=str(md_file),
+                content=content,
+            )
+
+            shingles = tokenize(content)
+            if shingles:
+                file_info.minhash = compute_minhash(shingles)
+                files.append(file_info)
+
+        except Exception as err:
+            print(f"Warning: Could not read {md_file}: {err}", file=sys.stderr)
+
+        if progress and task_id is not None:
+            progress.advance(task_id)
+
+    return files
+
+
+def load_baseline_files_with_progress(
+    spec: str,
+    progress: Optional[Progress] = None,
+) -> list[FileInfo]:
+    """Load files from a baseline specification with progress tracking.
+
+    Args:
+        spec: One of:
+            - "installed" - currently installed plugins
+            - "marketplace" - entire marketplace
+            - "marketplace/plugin" - specific plugin
+        progress: Optional Progress instance for tracking
+
+    Returns:
+        List of FileInfo with MinHash signatures computed.
+
+    Raises:
+        ValueError: If spec is empty, or marketplace or plugin not found.
+    """
+    if not spec or not spec.strip():
+        raise ValueError("Baseline spec cannot be empty")
+
+    if spec == "installed":
+        plugins = load_installed_plugins()
+        if not plugins:
+            return []
+
+        files = []
+
+        if progress:
+            # Count total files first for accurate progress
+            total_files = 0
+            for plugin in plugins:
+                plugin_files = list(plugin.install_path.rglob("*.md"))
+                total_files += len([f for f in plugin_files if "backup" not in str(f).lower()])
+
+            task = progress.add_task(f"Loading baseline: {spec}", total=total_files)
+
+            for plugin in plugins:
+                label = f"{plugin.name}@{plugin.marketplace}"
+                plugin_files = scan_directory_for_content_with_progress(
+                    plugin.install_path, label, progress, task
+                )
+                files.extend(plugin_files)
+        else:
+            for plugin in plugins:
+                label = f"{plugin.name}@{plugin.marketplace}"
+                files.extend(scan_directory_for_content(plugin.install_path, label))
+
+        return files
+
+    parts = spec.split("/", 1)
+    marketplace_name = parts[0]
+    plugin_name = parts[1] if len(parts) > 1 else None
+
+    marketplace_path = find_marketplace_path(marketplace_name)
+    if not marketplace_path:
+        raise ValueError(f"Marketplace not found: {marketplace_name}")
+
+    if plugin_name:
+        plugin_path = find_plugin_in_marketplace(marketplace_path, plugin_name)
+        if not plugin_path:
+            raise ValueError(f"Plugin not found: {plugin_name} in {marketplace_name}")
+        target_path = plugin_path
+    else:
+        target_path = marketplace_path
+
+    if progress:
+        # Count files
+        md_files = list(target_path.rglob("*.md"))
+        total_files = len([f for f in md_files if "backup" not in str(f).lower()])
+        task = progress.add_task(f"Loading baseline: {spec}", total=total_files)
+        return scan_directory_for_content_with_progress(target_path, marketplace_name, progress, task)
+    else:
+        return scan_directory_for_content(target_path, marketplace_name)
