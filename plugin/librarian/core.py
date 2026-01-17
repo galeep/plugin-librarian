@@ -127,15 +127,43 @@ class Capability:
 
 
 def tokenize(text: str) -> set[str]:
-    """Convert text to set of shingles."""
+    """Convert text to set of shingles.
+
+    Uses word-level shingles (n-grams) for content similarity detection.
+    For very short documents, falls back to character-level shingles.
+
+    Args:
+        text: Input text to tokenize
+
+    Returns:
+        Set of shingles (word n-grams or character n-grams for short text)
+    """
+    # Normalize: lowercase and collapse whitespace
     text = text.lower()
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
 
-    words = text.split()
+    # DESIGN RATIONALE: Keep dashes and alphanumerics
+    # Markdown files have frontmatter (key: value), code blocks, headers (#, ##)
+    # Removing ALL punctuation was too aggressive and caused empty shingle sets
+    # Now we keep dashes (important for YAML keys, multi-word terms)
+    text = re.sub(r'[^a-z0-9\s\-]', '', text)
+
+    # Split and filter empty strings
+    words = [w for w in text.split() if w]
+
+    # Handle short documents with fallback to character-level shingles
     if len(words) < SHINGLE_SIZE:
-        return set(words)
+        if words:
+            # Return individual words for very short docs
+            return set(words)
+        elif len(text) >= SHINGLE_SIZE:
+            # Fallback: character-level shingles for docs with no words
+            return set(text[i:i+SHINGLE_SIZE] for i in range(len(text) - SHINGLE_SIZE + 1))
+        else:
+            # Last resort: return the text itself as a single shingle
+            return {text} if text else set()
 
+    # Generate word-level shingles (n-grams)
     shingles = set()
     for i in range(len(words) - SHINGLE_SIZE + 1):
         shingle = ' '.join(words[i:i + SHINGLE_SIZE])
@@ -291,3 +319,83 @@ def load_baseline_files(spec: str) -> list[FileInfo]:
         return scan_directory_for_content(plugin_path, marketplace_name)
     else:
         return scan_directory_for_content(marketplace_path, marketplace_name)
+
+
+@dataclass
+class SanityCheckResult:
+    """Result of sanity checks on comparison results."""
+    confidence: str
+    warnings: list[str]
+
+    def to_dict(self) -> dict:
+        return {
+            "confidence": self.confidence,
+            "warnings": self.warnings,
+        }
+
+
+def check_similarity_sanity(
+    total_files: int,
+    novel_count: int,
+    redundant_count: int,
+    total_clusters: int = 0,
+) -> SanityCheckResult:
+    """Perform sanity checks on similarity analysis results.
+
+    Args:
+        total_files: Total number of files analyzed
+        novel_count: Number of novel (non-similar) files
+        redundant_count: Number of redundant (>90% similar) files
+        total_clusters: Total number of clusters in ecosystem (for scan results)
+
+    Returns:
+        SanityCheckResult with confidence level and warnings
+    """
+    warnings = []
+    confidence = "high"
+
+    if total_files == 0:
+        warnings.append("No files were analyzed")
+        confidence = "none"
+        return SanityCheckResult(confidence=confidence, warnings=warnings)
+
+    redundant_ratio = redundant_count / total_files
+    novel_ratio = novel_count / total_files
+
+    # Check for 0% cluster membership in large ecosystems
+    if total_clusters > 1000 and redundant_count == 0:
+        warnings.append(
+            f"0% cluster membership detected with {total_clusters} clusters in ecosystem. "
+            "This is statistically improbable and may indicate an indexing issue."
+        )
+        confidence = "low"
+
+    # Check for extreme ratios in larger datasets
+    if total_files > 500:
+        if redundant_ratio < 0.05:
+            warnings.append(
+                f"Very low similarity ratio ({redundant_ratio*100:.1f}%) for {total_files} files. "
+                "This may indicate a mismatch between target and baseline, or an indexing issue."
+            )
+            if confidence == "high":
+                confidence = "medium"
+
+        if redundant_ratio > 0.95:
+            warnings.append(
+                f"Very high similarity ratio ({redundant_ratio*100:.1f}%) for {total_files} files. "
+                "Nearly all content appears redundant, which may indicate an indexing issue."
+            )
+            if confidence == "high":
+                confidence = "medium"
+
+    # Check for suspiciously even splits
+    if total_files > 100:
+        if 0.48 <= novel_ratio <= 0.52 and 0.48 <= redundant_ratio <= 0.52:
+            warnings.append(
+                "Results show near-perfect 50/50 split between novel and redundant files. "
+                "This pattern may indicate random classification rather than meaningful similarity."
+            )
+            if confidence == "high":
+                confidence = "medium"
+
+    return SanityCheckResult(confidence=confidence, warnings=warnings)
