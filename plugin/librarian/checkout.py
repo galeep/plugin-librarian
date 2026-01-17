@@ -181,6 +181,11 @@ def checkout_skill(
                     target_file.parent.mkdir(parents=True, exist_ok=True)
                 else:
                     target_file = destination / item.name
+                    # Validate path stays within destination (prevent traversal)
+                    try:
+                        target_file.resolve().relative_to(destination.resolve())
+                    except ValueError:
+                        continue  # Skip files that would escape destination
                     # In flat mode, track seen names to warn about overwrites
                     if target_file.exists():
                         # File already copied, skip duplicate

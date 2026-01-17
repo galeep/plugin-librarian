@@ -2,6 +2,7 @@
 """Tests for checkout command functionality."""
 
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -90,7 +91,6 @@ def test_checkout_flat_mode():
         assert len(result.files_copied) > 0
 
         # In flat mode, all files should be in the root directory (no subdirs)
-        import os
         for file_path in result.files_copied:
             assert os.sep not in file_path and "/" not in file_path, f"File not in flat structure: {file_path}"
 
