@@ -7,6 +7,7 @@ import json
 import re
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -27,6 +28,51 @@ from .core import (
     check_similarity_sanity,
 )
 from .cmd_checkout import cmd_checkout
+
+
+# ============================================================================
+# Skill analysis dataclass
+# ============================================================================
+
+@dataclass
+class SkillInfo:
+    """Parsed skill metadata and analysis."""
+    name: str
+    kind: str  # skill or agent
+    marketplace: str
+    plugin: str
+    path: str
+    description: str
+    triggers: list[str]
+    dependencies: list[str]
+    tool_uses: list[str]
+    line_count: int
+    word_count: int
+    complexity_score: str  # low, medium, high
+    has_frontmatter: bool
+    raw_frontmatter: dict
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "kind": self.kind,
+            "location": {
+                "marketplace": self.marketplace,
+                "plugin": self.plugin,
+                "path": self.path,
+            },
+            "description": self.description,
+            "triggers": self.triggers,
+            "dependencies": self.dependencies,
+            "tool_uses": self.tool_uses,
+            "metrics": {
+                "line_count": self.line_count,
+                "word_count": self.word_count,
+                "complexity": self.complexity_score,
+            },
+            "has_frontmatter": self.has_frontmatter,
+            "frontmatter": self.raw_frontmatter,
+        }
 
 
 # Data directory for generated indexes
@@ -588,6 +634,305 @@ def cmd_stats(args):
 
 
 # ============================================================================
+# DESCRIBE command: Skill introspection
+# ============================================================================
+
+def find_skill_file(spec: str) -> tuple[Path, str, str] | None:
+    """Find a skill file by spec.
+
+    Args:
+        spec: One of:
+            - skill_name (searches all marketplaces)
+            - marketplace/skill_name
+            - marketplace/plugin/skill_name
+            - full path
+
+    Returns:
+        Tuple of (file_path, marketplace, plugin) or None if not found
+    """
+    # Try as direct path first
+    direct_path = Path(spec)
+    if direct_path.exists() and direct_path.suffix == ".md":
+        # Extract marketplace/plugin from path if possible
+        parts = direct_path.parts
+        marketplace = "local"
+        plugin = "unknown"
+        if "marketplaces" in parts:
+            idx = parts.index("marketplaces")
+            if idx + 1 < len(parts):
+                marketplace = parts[idx + 1]
+            if "plugins" in parts:
+                pidx = parts.index("plugins")
+                if pidx + 1 < len(parts):
+                    plugin = parts[pidx + 1]
+        return direct_path, marketplace, plugin
+
+    parts = spec.split("/")
+
+    if len(parts) == 1:
+        # Just skill name - search all marketplaces
+        skill_name = parts[0]
+        for mp in sorted(MARKETPLACES_DIR.iterdir()):
+            if not mp.is_dir() or mp.name.startswith("."):
+                continue
+            # Look in skills directories
+            for skill_file in mp.rglob("*.md"):
+                if skill_file.stem.lower() == skill_name.lower():
+                    if "skills" in str(skill_file) or "agents" in str(skill_file):
+                        rel_parts = skill_file.relative_to(mp).parts
+                        plugin = "root"
+                        if "plugins" in rel_parts:
+                            pidx = rel_parts.index("plugins")
+                            if pidx + 1 < len(rel_parts):
+                                plugin = rel_parts[pidx + 1]
+                        return skill_file, mp.name, plugin
+        return None
+
+    elif len(parts) == 2:
+        # marketplace/skill_name
+        marketplace_name, skill_name = parts
+        mp_path = find_marketplace_path(marketplace_name)
+        if not mp_path:
+            return None
+        for skill_file in mp_path.rglob("*.md"):
+            if skill_file.stem.lower() == skill_name.lower():
+                if "skills" in str(skill_file) or "agents" in str(skill_file):
+                    rel_parts = skill_file.relative_to(mp_path).parts
+                    plugin = "root"
+                    if "plugins" in rel_parts:
+                        pidx = rel_parts.index("plugins")
+                        if pidx + 1 < len(rel_parts):
+                            plugin = rel_parts[pidx + 1]
+                    return skill_file, marketplace_name, plugin
+        return None
+
+    else:
+        # marketplace/plugin/skill_name or longer path
+        marketplace_name = parts[0]
+        mp_path = find_marketplace_path(marketplace_name)
+        if not mp_path:
+            return None
+
+        # Try exact path reconstruction
+        remaining = "/".join(parts[1:])
+        if not remaining.endswith(".md"):
+            remaining += ".md"
+
+        # Try various locations
+        candidates = [
+            mp_path / remaining,
+            mp_path / "plugins" / remaining,
+            mp_path / "plugins" / parts[1] / "skills" / (parts[-1] + ".md" if not parts[-1].endswith(".md") else parts[-1]),
+            mp_path / "plugins" / parts[1] / "agents" / (parts[-1] + ".md" if not parts[-1].endswith(".md") else parts[-1]),
+        ]
+
+        for candidate in candidates:
+            if candidate.exists():
+                plugin = parts[1] if len(parts) > 2 else "root"
+                return candidate, marketplace_name, plugin
+
+        # Fallback: search within marketplace/plugin
+        if len(parts) >= 2:
+            plugin_name = parts[1]
+            plugin_path = find_plugin_in_marketplace(mp_path, plugin_name)
+            if plugin_path:
+                skill_name = parts[-1].replace(".md", "")
+                for skill_file in plugin_path.rglob("*.md"):
+                    if skill_file.stem.lower() == skill_name.lower():
+                        return skill_file, marketplace_name, plugin_name
+
+        return None
+
+
+def analyze_skill_content(content: str) -> dict:
+    """Analyze skill content for complexity indicators.
+
+    Returns dict with:
+        - tool_uses: list of tools mentioned
+        - dependencies: list of dependencies
+        - triggers: list of trigger phrases
+        - complexity_score: low/medium/high
+    """
+    tool_patterns = [
+        r'\bBash\b', r'\bRead\b', r'\bWrite\b', r'\bEdit\b', r'\bGlob\b',
+        r'\bGrep\b', r'\bTask\b', r'\bWebFetch\b', r'\bWebSearch\b',
+        r'\bTodoWrite\b', r'\bAskUserQuestion\b', r'\bMCP\b', r'\bmcp-cli\b',
+    ]
+    tools_found = []
+    for pattern in tool_patterns:
+        if re.search(pattern, content, re.IGNORECASE):
+            tool_name = pattern.strip(r'\b')
+            if tool_name not in tools_found:
+                tools_found.append(tool_name)
+
+    # Extract trigger phrases from "Use this skill when" patterns
+    triggers = []
+    trigger_patterns = [
+        r'[Uu]se this (?:skill|agent) when[^.]*\.',
+        r'[Tt]rigger(?:s|ed)? (?:by|when|with)[^.]*\.',
+        r'[Uu]se for[^.]*\.',
+    ]
+    for pattern in trigger_patterns:
+        matches = re.findall(pattern, content)
+        triggers.extend(matches[:3])  # Limit to 3 per pattern
+
+    # Look for dependency indicators
+    dependencies = []
+    dep_patterns = [
+        r'[Rr]equires? ([a-zA-Z0-9_-]+)',
+        r'[Dd]epends? on ([a-zA-Z0-9_-]+)',
+        r'[Nn]eeds? ([a-zA-Z0-9_-]+)',
+    ]
+    for pattern in dep_patterns:
+        matches = re.findall(pattern, content)
+        for match in matches[:5]:
+            if match.lower() not in ['the', 'a', 'an', 'to', 'be']:
+                dependencies.append(match)
+
+    # Calculate complexity score
+    line_count = len(content.splitlines())
+    word_count = len(content.split())
+
+    complexity = "low"
+    if line_count > 200 or word_count > 1500 or len(tools_found) > 5:
+        complexity = "high"
+    elif line_count > 80 or word_count > 600 or len(tools_found) > 2:
+        complexity = "medium"
+
+    return {
+        "tool_uses": tools_found,
+        "dependencies": list(set(dependencies)),
+        "triggers": triggers,
+        "complexity_score": complexity,
+        "line_count": line_count,
+        "word_count": word_count,
+    }
+
+
+def parse_skill_file(file_path: Path, marketplace: str, plugin: str) -> SkillInfo:
+    """Parse a skill file and return SkillInfo."""
+    content = file_path.read_text(encoding="utf-8", errors="replace")
+
+    # Determine kind from path
+    kind = "skill"
+    if "agents" in str(file_path):
+        kind = "agent"
+
+    # Parse frontmatter
+    frontmatter = parse_frontmatter(content)
+    has_frontmatter = bool(frontmatter)
+
+    # Extract name
+    name = frontmatter.get("name", file_path.stem)
+
+    # Extract description
+    description = frontmatter.get("description", "")
+    if isinstance(description, list):
+        description = " ".join(description)
+
+    if not description:
+        # Try to extract from content
+        body = content
+        if content.startswith("---"):
+            end_match = re.search(r"\n---\s*\n", content[3:])
+            if end_match:
+                body = content[3 + end_match.end():]
+
+        for line in body.split("\n"):
+            line = line.strip()
+            if line and not line.startswith("#") and not line.startswith("-") and len(line) > 20:
+                description = line[:300]
+                break
+
+    # Analyze content
+    analysis = analyze_skill_content(content)
+
+    # Get triggers from frontmatter if available
+    fm_triggers = frontmatter.get("triggers", [])
+    if isinstance(fm_triggers, str):
+        fm_triggers = [fm_triggers]
+    all_triggers = fm_triggers + analysis["triggers"]
+
+    return SkillInfo(
+        name=name,
+        kind=kind,
+        marketplace=marketplace,
+        plugin=plugin,
+        path=str(file_path.relative_to(MARKETPLACES_DIR)) if str(file_path).startswith(str(MARKETPLACES_DIR)) else str(file_path),
+        description=description,
+        triggers=all_triggers[:5],  # Limit
+        dependencies=analysis["dependencies"],
+        tool_uses=analysis["tool_uses"],
+        line_count=analysis["line_count"],
+        word_count=analysis["word_count"],
+        complexity_score=analysis["complexity_score"],
+        has_frontmatter=has_frontmatter,
+        raw_frontmatter=frontmatter,
+    )
+
+
+def cmd_describe(args):
+    """Describe a skill or agent."""
+    result = find_skill_file(args.skill_spec)
+
+    if not result:
+        print(f"Skill not found: {args.skill_spec}")
+        print(f"\nTry:")
+        print(f"  librarian describe <skill_name>")
+        print(f"  librarian describe <marketplace>/<skill_name>")
+        print(f"  librarian describe <marketplace>/<plugin>/<skill_name>")
+        sys.exit(1)
+
+    file_path, marketplace, plugin = result
+    skill_info = parse_skill_file(file_path, marketplace, plugin)
+
+    if getattr(args, 'json', False):
+        print(json.dumps(skill_info.to_dict(), indent=2))
+        return
+
+    # Formatted output
+    icon = "📘" if skill_info.kind == "skill" else "🤖"
+    print(f"\n{icon} {skill_info.name}")
+    print(f"{'=' * 50}")
+    print(f"Type:        {skill_info.kind}")
+    print(f"Location:    {skill_info.marketplace}/{skill_info.plugin}")
+    print(f"Path:        {skill_info.path}")
+    print(f"Complexity:  {skill_info.complexity_score}")
+    print(f"Size:        {skill_info.line_count} lines, {skill_info.word_count} words")
+
+    if skill_info.description:
+        print(f"\nDescription:")
+        # Word wrap description
+        desc = skill_info.description
+        while desc:
+            print(f"  {desc[:70]}")
+            desc = desc[70:]
+
+    if skill_info.triggers:
+        print(f"\nTriggers:")
+        for trigger in skill_info.triggers:
+            print(f"  - {trigger[:80]}{'...' if len(trigger) > 80 else ''}")
+
+    if skill_info.tool_uses:
+        print(f"\nTools used:")
+        print(f"  {', '.join(skill_info.tool_uses)}")
+
+    if skill_info.dependencies:
+        print(f"\nDependencies:")
+        for dep in skill_info.dependencies:
+            print(f"  - {dep}")
+
+    if args.verbose and skill_info.raw_frontmatter:
+        print(f"\nFrontmatter:")
+        for key, value in skill_info.raw_frontmatter.items():
+            if key not in ['name', 'description', 'triggers']:
+                val_str = str(value)[:60]
+                print(f"  {key}: {val_str}{'...' if len(str(value)) > 60 else ''}")
+
+    print()
+
+
+# ============================================================================
 # SCAN command: Build similarity index
 # ============================================================================
 
@@ -818,6 +1163,12 @@ def main():
     checkout_p.add_argument("--dir", "-d", default=None, help="Destination directory (default: current)")
     checkout_p.add_argument("--flat", "-f", action="store_true", help="Flatten directory structure")
 
+    # describe
+    describe_p = subparsers.add_parser("describe", help="Describe a skill or agent")
+    describe_p.add_argument("skill_spec", help="Skill name, marketplace/skill, or marketplace/plugin/skill")
+    describe_p.add_argument("-v", "--verbose", action="store_true", help="Show all frontmatter fields")
+    describe_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     args = parser.parse_args()
 
     if args.command == "scan":
@@ -836,6 +1187,8 @@ def main():
         cmd_stats(args)
     elif args.command == "checkout":
         cmd_checkout(args)
+    elif args.command == "describe":
+        cmd_describe(args)
     else:
         parser.print_help()
 
