@@ -140,7 +140,7 @@ def compute_file_diff(
     stats = {
         "total_lines_file1": len(lines1),
         "total_lines_file2": len(lines2),
-        "diff_lines": len([line for line in unified_diff if line.startswith(('+', '-'))]),
+        "diff_lines": len([line for line in unified_diff if line.startswith(('+', '-')) and not line.startswith(('+++', '---'))]),
         "functions_added": len(funcs2 - funcs1),
         "functions_removed": len(funcs1 - funcs2),
     }

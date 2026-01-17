@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -220,7 +221,6 @@ def load_installed_plugins() -> list[InstalledPlugin]:
 
 def scan_directory_for_content(directory: Path, label: str = "") -> list[FileInfo]:
     """Scan a directory for content files with MinHash signatures."""
-    import sys
     files = []
 
     for md_file in directory.rglob("*.md"):
@@ -447,7 +447,6 @@ def scan_directory_for_content_with_progress(
     Returns:
         List of FileInfo objects with computed MinHash signatures
     """
-    import sys
     files = []
 
     # First pass: collect all markdown files
