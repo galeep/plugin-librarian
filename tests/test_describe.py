@@ -3,15 +3,12 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import Mock, patch
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "plugin"))
 
 from librarian.cli import (
-    find_skill_file,
     analyze_skill_content,
-    parse_skill_file,
     SkillInfo,
 )
 

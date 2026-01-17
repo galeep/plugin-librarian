@@ -753,15 +753,17 @@ def analyze_skill_content(content: str) -> dict:
         - triggers: list of trigger phrases
         - complexity_score: low/medium/high
     """
-    tool_patterns = [
-        r'\bBash\b', r'\bRead\b', r'\bWrite\b', r'\bEdit\b', r'\bGlob\b',
-        r'\bGrep\b', r'\bTask\b', r'\bWebFetch\b', r'\bWebSearch\b',
-        r'\bTodoWrite\b', r'\bAskUserQuestion\b', r'\bMCP\b', r'\bmcp-cli\b',
+    # Tool names to look for (as word boundaries)
+    tool_names = [
+        'Bash', 'Read', 'Write', 'Edit', 'Glob',
+        'Grep', 'Task', 'WebFetch', 'WebSearch',
+        'TodoWrite', 'AskUserQuestion', 'MCP', 'mcp-cli',
     ]
     tools_found = []
-    for pattern in tool_patterns:
+    for tool_name in tool_names:
+        # Build word-boundary pattern for each tool
+        pattern = rf'\b{re.escape(tool_name)}\b'
         if re.search(pattern, content, re.IGNORECASE):
-            tool_name = pattern.strip(r'\b')
             if tool_name not in tools_found:
                 tools_found.append(tool_name)
 
@@ -902,11 +904,11 @@ def cmd_describe(args):
 
     if skill_info.description:
         print(f"\nDescription:")
-        # Word wrap description
-        desc = skill_info.description
-        while desc:
-            print(f"  {desc[:70]}")
-            desc = desc[70:]
+        # Word wrap description at word boundaries
+        import textwrap
+        wrapped = textwrap.wrap(skill_info.description, width=70)
+        for line in wrapped:
+            print(f"  {line}")
 
     if skill_info.triggers:
         print(f"\nTriggers:")
