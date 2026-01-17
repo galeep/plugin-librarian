@@ -33,4 +33,15 @@ node_modules/
 
 # Task files
 # tasks.json
-# tasks/ 
+# tasks/
+
+# Claude-mem auto-generated files
+**/CLAUDE.md
+
+# Agent scratch files
+test_*.py
+!tests/test_*.py
+similarity.py
+scan.py
+ANALYSIS.md
+FIX_SUMMARY.md 

@@ -24,6 +24,7 @@ from .core import (
     scan_directory_for_content,
     find_marketplace_path,
     find_plugin_in_marketplace,
+    check_similarity_sanity,
 )
 
 
@@ -246,8 +247,27 @@ def cmd_compare(args):
             else:
                 novel.append({"file": tf.relative_path, "status": "novel"})
 
-    # Output
+    # Get total clusters from similarity report if it exists
+    total_clusters = 0
+    if SIMILARITY_REPORT.exists():
+        try:
+            with open(SIMILARITY_REPORT) as fh:
+                report = json.load(fh)
+                total_clusters = report.get("summary", {}).get("unique_clusters", 0)
+        except (json.JSONDecodeError, KeyError):
+            # Report may be missing, malformed, or lack expected fields
+            pass
+
+    # Perform sanity checks
     total = len(target_files)
+    sanity_result = check_similarity_sanity(
+        total_files=total,
+        novel_count=len(novel),
+        redundant_count=len(redundant),
+        total_clusters=total_clusters,
+    )
+
+    # Output
     print(f"{'=' * 50}")
     print(f"COMPARISON: {target_name}")
     print(f"vs BASELINE: {baseline_spec}")
@@ -256,6 +276,12 @@ def cmd_compare(args):
     print(f"Novel (not similar):  {len(novel)} ({len(novel)/total*100:.0f}%)" if total else "Novel: 0")
     print(f"Redundant (>90% sim): {len(redundant)} ({len(redundant)/total*100:.0f}%)" if total else "Redundant: 0")
     print(f"Partial overlap:      {len(partial)}")
+    print(f"Confidence:           {sanity_result.confidence}")
+
+    if sanity_result.warnings:
+        print(f"\nWARNINGS:")
+        for warning in sanity_result.warnings:
+            print(f"  ! {warning}")
 
     if args.verbose:
         if redundant:
@@ -275,6 +301,25 @@ def cmd_compare(args):
             print(f"Some overlap with installed plugins ({ratio*100:.0f}%).")
         else:
             print(f"Low overlap - mostly novel content.")
+
+    # Add JSON output support
+    if getattr(args, 'json', False):
+        json_output = {
+            "target": target_name,
+            "baseline": baseline_spec,
+            "summary": {
+                "total_files": total,
+                "novel": len(novel),
+                "redundant": len(redundant),
+                "partial": len(partial),
+            },
+            "confidence": sanity_result.confidence,
+            "warnings": sanity_result.warnings,
+            "novel_files": novel,
+            "redundant_files": redundant,
+            "partial_files": partial,
+        }
+        print("\n" + json.dumps(json_output, indent=2))
 
 
 # ============================================================================
@@ -595,11 +640,27 @@ def cmd_scan(args):
     print("Building MinHash signatures...")
     lsh = MinHashLSH(threshold=SIMILARITY_THRESHOLD, num_perm=NUM_PERM)
 
+    # Track diagnostic info
+    files_indexed = 0
+    files_skipped = 0
+    empty_shingles = []
+
     for i, f in enumerate(files):
         shingles = tokenize(f.content)
         if shingles:
             f.minhash = compute_minhash(shingles)
             lsh.insert(str(i), f.minhash)
+            files_indexed += 1
+        else:
+            files_skipped += 1
+            empty_shingles.append(f"{f.marketplace}/{f.plugin}/{f.relative_path}")
+
+    print(f"Indexed {files_indexed} files into LSH")
+    if files_skipped > 0:
+        print(f"Skipped {files_skipped} files with empty shingles")
+        if files_skipped <= 10:
+            for path in empty_shingles:
+                print(f"  - {path}")
 
     print("Finding similarity clusters...")
     assigned = set()
@@ -660,6 +721,15 @@ def cmd_scan(args):
         by_type[c["type"]].append(c)
 
     total_in_clusters = sum(c["size"] for c in clusters)
+    unclustered = len(files) - total_in_clusters
+
+    # Perform sanity checks on scan results
+    sanity_result = check_similarity_sanity(
+        total_files=len(files),
+        novel_count=unclustered,
+        redundant_count=total_in_clusters,
+        total_clusters=len(clusters),
+    )
 
     output = {
         "summary": {
@@ -667,6 +737,8 @@ def cmd_scan(args):
             "files_in_clusters": total_in_clusters,
             "unique_clusters": len(clusters),
             "similarity_threshold": SIMILARITY_THRESHOLD,
+            "confidence": sanity_result.confidence,
+            "warnings": sanity_result.warnings,
             "by_type": {
                 ctype: {
                     "clusters": len(by_type.get(ctype, [])),
@@ -687,6 +759,13 @@ def cmd_scan(args):
     print(f"Total files: {len(files)}")
     print(f"Files in clusters: {total_in_clusters}")
     print(f"Clusters: {len(clusters)}")
+    print(f"Confidence: {sanity_result.confidence}")
+
+    if sanity_result.warnings:
+        print(f"\nWARNINGS:")
+        for warning in sanity_result.warnings:
+            print(f"  ! {warning}")
+
     print(f"\nReport saved to: {SIMILARITY_REPORT}")
 
 
@@ -713,6 +792,7 @@ def main():
     compare_p.add_argument("--baseline", "-b", default="installed",
                            help="Baseline: 'installed', marketplace, or marketplace/plugin (default: installed)")
     compare_p.add_argument("-v", "--verbose", action="store_true")
+    compare_p.add_argument("--json", action="store_true", help="Output results as JSON")
 
     # impact
     impact_p = subparsers.add_parser("impact", help="Quick impact summary")
