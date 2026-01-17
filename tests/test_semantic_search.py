@@ -11,7 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "plugin"))
 
 from librarian.core import Capability
 from librarian.cli import (
-    build_capability_index,
     save_capability_index,
     load_capability_index,
 )

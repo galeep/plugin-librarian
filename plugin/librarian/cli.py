@@ -630,7 +630,7 @@ def load_capability_index() -> list[Capability]:
             ))
 
         return capabilities
-    except (json.JSONDecodeError, KeyError) as e:
+    except (json.JSONDecodeError, KeyError, OSError) as e:
         print(f"Warning: Could not load capability index: {e}", file=sys.stderr)
         return []
 
@@ -641,15 +641,19 @@ def cmd_find(args):
     all_caps = load_capability_index()
 
     if all_caps:
-        print(f"Loaded {len(all_caps)} capabilities from index.")
+        print(f"Loaded {len(all_caps)} capabilities from index.\n")
     else:
-        # Fallback to live scan
+        # Fallback to live scan and cache results
         print(f"No index found. Scanning marketplaces...")
         print(f"Tip: Run 'librarian scan' to build an index for faster searches.\n")
         all_caps = build_capability_index()
-        print(f"Found {len(all_caps)} skills and agents.")
+        if all_caps:
+            save_capability_index(all_caps)
+            print(f"Found {len(all_caps)} skills and agents (cached for future searches).\n")
+        else:
+            print(f"No skills or agents found.\n")
 
-    print(f"Searching for: {args.query}\n")
+    print(f"Searching for: {args.query}")
 
     results = []
     for cap in all_caps:
