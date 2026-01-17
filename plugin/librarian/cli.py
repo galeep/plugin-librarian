@@ -26,6 +26,7 @@ from .core import (
     find_plugin_in_marketplace,
     check_similarity_sanity,
 )
+from .cmd_checkout import cmd_checkout
 
 
 # Data directory for generated indexes
@@ -811,6 +812,12 @@ def main():
     # stats
     subparsers.add_parser("stats", help="Show index statistics")
 
+    # checkout
+    checkout_p = subparsers.add_parser("checkout", help="Copy a skill/agent to local directory")
+    checkout_p.add_argument("skill", help="Skill spec: skill_name, marketplace/skill, or marketplace/plugin/skill")
+    checkout_p.add_argument("--dir", "-d", default=None, help="Destination directory (default: current)")
+    checkout_p.add_argument("--flat", "-f", action="store_true", help="Flatten directory structure")
+
     args = parser.parse_args()
 
     if args.command == "scan":
@@ -827,6 +834,8 @@ def main():
         cmd_find(args)
     elif args.command == "stats":
         cmd_stats(args)
+    elif args.command == "checkout":
+        cmd_checkout(args)
     else:
         parser.print_help()
 
