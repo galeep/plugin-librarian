@@ -256,15 +256,18 @@ def load_baseline_files(spec: str) -> list[FileInfo]:
     Args:
         spec: One of:
             - "installed" - currently installed plugins
-            - "marketplace-name" - entire marketplace
+            - "marketplace" - entire marketplace
             - "marketplace/plugin" - specific plugin
 
     Returns:
         List of FileInfo with MinHash signatures computed.
 
     Raises:
-        ValueError: If marketplace or plugin not found.
+        ValueError: If spec is empty, or marketplace or plugin not found.
     """
+    if not spec or not spec.strip():
+        raise ValueError("Baseline spec cannot be empty")
+
     if spec == "installed":
         plugins = load_installed_plugins()
         files = []
@@ -285,6 +288,6 @@ def load_baseline_files(spec: str) -> list[FileInfo]:
         plugin_path = find_plugin_in_marketplace(marketplace_path, plugin_name)
         if not plugin_path:
             raise ValueError(f"Plugin not found: {plugin_name} in {marketplace_name}")
-        return scan_directory_for_content(plugin_path, spec)
+        return scan_directory_for_content(plugin_path, marketplace_name)
     else:
         return scan_directory_for_content(marketplace_path, marketplace_name)
