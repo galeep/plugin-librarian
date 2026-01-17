@@ -233,11 +233,9 @@ def cmd_compare_marketplaces(args):
     # Scan both marketplaces
     print(f"Scanning marketplace A: {marketplace_a}...")
     files_a = scan_directory_for_content(mp_a_path, marketplace_a)
-    print(f"Found {len(files_a)} content files in {marketplace_a}")
 
     print(f"Scanning marketplace B: {marketplace_b}...")
     files_b = scan_directory_for_content(mp_b_path, marketplace_b)
-    print(f"Found {len(files_b)} content files in {marketplace_b}")
     print()
 
     # Build LSH index for marketplace A (only files with minhash)
@@ -254,8 +252,10 @@ def cmd_compare_marketplaces(args):
             files_a_with_minhash += 1
 
     # Query with marketplace B to find overlaps (only files with minhash)
-    print("Finding overlaps with marketplace B...")
     files_b_with_minhash = sum(1 for f in files_b if f.minhash)
+
+    print(f"Indexable files: {files_a_with_minhash} in {marketplace_a}, {files_b_with_minhash} in {marketplace_b}")
+    print("Finding overlaps...")
 
     shared_b_indices = set()
     shared_a_keys = set()

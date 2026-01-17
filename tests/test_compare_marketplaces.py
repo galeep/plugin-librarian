@@ -62,7 +62,7 @@ def test_identical_marketplaces():
         # Check that output mentions 100% overlap
         printed_output = " ".join([str(call.args[0]) if call.args else "" for call in mock_print.call_args_list])
         assert "Identical marketplaces" in printed_output or "100%" in printed_output
-        print("✓ Identical marketplaces detected correctly")
+        print("[PASS] Identical marketplaces detected correctly")
 
 
 def test_disjoint_marketplaces():
@@ -97,7 +97,7 @@ def test_disjoint_marketplaces():
 
         printed_output = " ".join([str(call.args[0]) if call.args else "" for call in mock_print.call_args_list])
         assert "Disjoint" in printed_output or "0%" in printed_output or "0 files" in printed_output
-        print("✓ Disjoint marketplaces detected correctly")
+        print("[PASS] Disjoint marketplaces detected correctly")
 
 
 def test_partial_overlap():
@@ -138,7 +138,7 @@ def test_partial_overlap():
         # Should show both shared and unique content
         assert "Shared" in printed_output or "overlap" in printed_output
         assert "unique" in printed_output.lower()
-        print("✓ Partial overlap detected correctly")
+        print("[PASS] Partial overlap detected correctly")
 
 
 def test_empty_marketplace():
@@ -168,7 +168,7 @@ def test_empty_marketplace():
 
         printed_output = " ".join([str(call.args[0]) if call.args else "" for call in mock_print.call_args_list])
         assert "WARNING" in printed_output or "0 files" in printed_output
-        print("✓ Empty marketplace handled correctly")
+        print("[PASS] Empty marketplace handled correctly")
 
 
 def test_json_output():
@@ -198,7 +198,7 @@ def test_json_output():
         # Check that JSON-like output was printed
         printed_output = " ".join([str(call.args[0]) if call.args else "" for call in mock_print.call_args_list])
         assert "marketplace_a" in printed_output or "{" in printed_output
-        print("✓ JSON output generated correctly")
+        print("[PASS] JSON output generated correctly")
 
 
 def test_similarity_threshold():
@@ -227,7 +227,7 @@ def test_similarity_threshold():
         # Should not crash and should handle the comparison
         try:
             cmd_compare_marketplaces(args)
-            print("✓ Similarity threshold handled correctly")
+            print("[PASS] Similarity threshold handled correctly")
         except Exception as e:
             print(f"✗ Error: {e}")
             raise
@@ -276,7 +276,7 @@ def test_large_marketplaces():
         # and contains expected keywords
         assert "Shared" in printed_output or "overlap" in printed_output
         assert "unique" in printed_output.lower() or "only" in printed_output.lower()
-        print("✓ Large marketplace comparison completed successfully")
+        print("[PASS] Large marketplace comparison completed successfully")
 
 
 def test_marketplace_not_found():
@@ -304,7 +304,7 @@ def test_marketplace_not_found():
             assert False, "Should have exited with error"
         except SystemExit as e:
             assert e.code == 1
-            print("✓ Marketplace not found error handled correctly")
+            print("[PASS] Marketplace not found error handled correctly")
 
 
 if __name__ == "__main__":
@@ -319,4 +319,4 @@ if __name__ == "__main__":
     test_large_marketplaces()
     test_marketplace_not_found()
 
-    print("\n✓ All marketplace comparison tests passed!")
+    print("\n[PASS] All marketplace comparison tests passed!")
