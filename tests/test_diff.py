@@ -96,6 +96,10 @@ def test_semantic_changes_detection():
         content="def foo():\n    pass\n\ndef baz():\n    pass\n",
     )
 
+    # Compute minhash for similarity
+    file1.minhash = compute_minhash(tokenize(file1.content))
+    file2.minhash = compute_minhash(tokenize(file2.content))
+
     diff = compute_file_diff(file1, file2)
 
     # Should detect function added and class removed
@@ -126,6 +130,10 @@ def test_diff_stats():
         full_path="/tmp/b.md",
         content="Line 1\nModified Line 2\nLine 3\nLine 4\n",
     )
+
+    # Compute minhash for similarity
+    file1.minhash = compute_minhash(tokenize(file1.content))
+    file2.minhash = compute_minhash(tokenize(file2.content))
 
     diff = compute_file_diff(file1, file2)
 
@@ -185,6 +193,10 @@ def test_to_dict_json_output():
         full_path="/tmp/b.md",
         content="Content B\n",
     )
+
+    # Compute minhash for similarity
+    file1.minhash = compute_minhash(tokenize(file1.content))
+    file2.minhash = compute_minhash(tokenize(file2.content))
 
     diff = compute_file_diff(file1, file2)
     result = diff.to_dict()

@@ -4,7 +4,7 @@ import difflib
 import re
 from dataclasses import dataclass
 
-from .core import FileInfo, tokenize, compute_minhash
+from .core import FileInfo
 
 
 def normalize_for_diff(text: str) -> list[str]:
@@ -29,17 +29,19 @@ def normalize_for_diff(text: str) -> list[str]:
         # Strip trailing whitespace
         line = line.rstrip()
 
-        # Normalize leading whitespace to single spaces
-        # Count leading spaces/tabs
+        # Normalize leading whitespace
         stripped = line.lstrip()
         if not stripped:
             # Keep blank lines as empty strings
             normalized.append("")
         else:
-            # Replace leading whitespace with normalized indent
-            indent_count = len(line) - len(stripped)
-            # Convert tabs to spaces (4 spaces per tab) for consistent comparison
-            normalized_indent = " " * (indent_count // 4)
+            # Expand tabs to spaces first, then count indent level
+            leading = line[:len(line) - len(stripped)]
+            # Convert tabs to 4 spaces for consistent comparison
+            expanded = leading.replace("\t", "    ")
+            # Count indent levels (4 spaces = 1 indent level)
+            indent_level = len(expanded) // 4
+            normalized_indent = " " * indent_level
             normalized.append(normalized_indent + stripped)
 
     return normalized
@@ -165,7 +167,6 @@ def format_diff_for_terminal(diff: FileDiff) -> str:
     # ANSI color codes
     RED = "\033[91m"
     GREEN = "\033[92m"
-    YELLOW = "\033[93m"
     CYAN = "\033[96m"
     BOLD = "\033[1m"
     RESET = "\033[0m"
