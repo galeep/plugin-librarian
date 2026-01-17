@@ -19,13 +19,17 @@ from .core import (
     Location,
     ClusterInfo,
     Capability,
+    SkillDescription,
     load_installed_plugins,
     load_baseline_files,
     scan_directory_for_content,
     find_marketplace_path,
     find_plugin_in_marketplace,
     check_similarity_sanity,
+    find_skill_file,
+    extract_skill_metadata,
 )
+from .cmd_checkout import cmd_checkout
 
 
 # Data directory for generated indexes
