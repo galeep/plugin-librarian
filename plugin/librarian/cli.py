@@ -79,6 +79,7 @@ class SkillInfo:
 # Data directory for generated indexes
 DATA_DIR = Path.home() / ".librarian"
 SIMILARITY_REPORT = DATA_DIR / "similarity_report.json"
+CAPABILITY_INDEX = DATA_DIR / "capability_index.json"
 
 
 def ensure_data_dir():
@@ -557,17 +558,97 @@ def scan_capabilities(marketplace_path: Path) -> list[Capability]:
     return capabilities
 
 
-def cmd_find(args):
-    """Search for capabilities."""
-    print(f"Scanning marketplaces...")
+def build_capability_index() -> list[Capability]:
+    """Build capability index from all marketplaces.
+
+    Returns:
+        List of all capabilities found across marketplaces
+    """
     all_caps = []
     for mp in sorted(MARKETPLACES_DIR.iterdir()):
         if not mp.is_dir() or mp.name.startswith("."):
             continue
         caps = scan_capabilities(mp)
         all_caps.extend(caps)
+    return all_caps
 
-    print(f"Found {len(all_caps)} skills and agents.\n")
+
+def save_capability_index(capabilities: list[Capability]) -> None:
+    """Save capability index to JSON file.
+
+    Args:
+        capabilities: List of Capability objects to save
+    """
+    ensure_data_dir()
+    index_data = {
+        "capabilities": [
+            {
+                "name": cap.name,
+                "kind": cap.kind,
+                "description": cap.description,
+                "marketplace": cap.marketplace,
+                "plugin": cap.plugin,
+                "path": cap.path,
+                "triggers": cap.triggers,
+            }
+            for cap in capabilities
+        ],
+        "metadata": {
+            "total_count": len(capabilities),
+            "skills": sum(1 for c in capabilities if c.kind == "skill"),
+            "agents": sum(1 for c in capabilities if c.kind == "agent"),
+        }
+    }
+
+    with open(CAPABILITY_INDEX, "w") as fh:
+        json.dump(index_data, fh, indent=2)
+
+
+def load_capability_index() -> list[Capability]:
+    """Load capability index from JSON file.
+
+    Returns:
+        List of Capability objects from index, or empty list if not found
+    """
+    if not CAPABILITY_INDEX.exists():
+        return []
+
+    try:
+        with open(CAPABILITY_INDEX) as fh:
+            index_data = json.load(fh)
+
+        capabilities = []
+        for cap_data in index_data.get("capabilities", []):
+            capabilities.append(Capability(
+                name=cap_data["name"],
+                kind=cap_data["kind"],
+                description=cap_data["description"],
+                marketplace=cap_data["marketplace"],
+                plugin=cap_data["plugin"],
+                path=cap_data["path"],
+                triggers=cap_data.get("triggers", []),
+            ))
+
+        return capabilities
+    except (json.JSONDecodeError, KeyError) as e:
+        print(f"Warning: Could not load capability index: {e}", file=sys.stderr)
+        return []
+
+
+def cmd_find(args):
+    """Search for capabilities."""
+    # Try to load from index first
+    all_caps = load_capability_index()
+
+    if all_caps:
+        print(f"Loaded {len(all_caps)} capabilities from index.")
+    else:
+        # Fallback to live scan
+        print(f"No index found. Scanning marketplaces...")
+        print(f"Tip: Run 'librarian scan' to build an index for faster searches.\n")
+        all_caps = build_capability_index()
+        print(f"Found {len(all_caps)} skills and agents.")
+
     print(f"Searching for: {args.query}\n")
 
     results = []
@@ -1101,6 +1182,12 @@ def cmd_scan(args):
     with open(SIMILARITY_REPORT, "w") as fh:
         json.dump(output, fh, indent=2)
 
+    # Build capability index
+    print("\nBuilding capability index...")
+    capabilities = build_capability_index()
+    save_capability_index(capabilities)
+    print(f"Indexed {len(capabilities)} capabilities ({sum(1 for c in capabilities if c.kind == 'skill')} skills, {sum(1 for c in capabilities if c.kind == 'agent')} agents)")
+
     print(f"\n{'=' * 50}")
     print("SCAN COMPLETE")
     print(f"{'=' * 50}")
@@ -1115,6 +1202,7 @@ def cmd_scan(args):
             print(f"  ! {warning}")
 
     print(f"\nReport saved to: {SIMILARITY_REPORT}")
+    print(f"Capability index saved to: {CAPABILITY_INDEX}")
 
 
 # ============================================================================
