@@ -1,8 +1,6 @@
 """Tests for improved JSON structure and queryability."""
 
 import json
-import pytest
-from pathlib import Path
 from datetime import datetime, timezone
 
 

@@ -116,12 +116,12 @@ class LocationIndex:
             # Old format
             self.total_files = report["summary"]["total_files_scanned"]
 
-        for cluster_data in report["clusters"]:
+        for idx, cluster_data in enumerate(report["clusters"]):
             # Handle both old format (no cluster_id) and new format (has cluster_id)
-            cluster_id = cluster_data.get("cluster_id", cluster_data.get("type", 0))
-            if isinstance(cluster_id, str):
-                # Old format may have used index
-                cluster_id = len(self.clusters)
+            cluster_id = cluster_data.get("cluster_id")
+            if cluster_id is None or isinstance(cluster_id, str):
+                # Old format doesn't have cluster_id, use array index
+                cluster_id = idx
 
             locations = [
                 Location(
@@ -1054,7 +1054,10 @@ def cmd_scan(args):
 
         if len(similar_indices) > 1:
             cluster_id = len(clusters)
-            cluster_files = [files[j] for j in similar_indices if files[j].minhash is not None]
+            # Filter both indices and files together to maintain alignment
+            filtered = [(j, files[j]) for j in similar_indices if files[j].minhash is not None]
+            similar_indices = [pair[0] for pair in filtered]
+            cluster_files = [pair[1] for pair in filtered]
 
             # Calculate pairwise similarities for similarity matrix
             similarities = []
