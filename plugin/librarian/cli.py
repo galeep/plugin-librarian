@@ -20,6 +20,7 @@ from .core import (
     ClusterInfo,
     Capability,
     load_installed_plugins,
+    load_baseline_files,
     scan_directory_for_content,
     find_marketplace_path,
     find_plugin_in_marketplace,
@@ -156,7 +157,7 @@ def cmd_where(args):
 # ============================================================================
 
 def cmd_compare(args):
-    """Compare target against installed plugins."""
+    """Compare target against a baseline (installed plugins or another marketplace/plugin)."""
     parts = args.target.split("/", 1)
     marketplace_name = parts[0]
     plugin_name = parts[1] if len(parts) > 1 else None
@@ -178,26 +179,25 @@ def cmd_compare(args):
         target_path = marketplace_path
         target_name = marketplace_name
 
-    print(f"Building index of installed plugins...")
-    installed = load_installed_plugins()
+    baseline_spec = getattr(args, 'baseline', 'installed')
+    print(f"Building index from baseline: {baseline_spec}...")
 
-    if not installed:
-        print("No installed plugins found.")
+    try:
+        baseline_files = load_baseline_files(baseline_spec)
+    except ValueError as e:
+        print(f"Error: {e}")
         sys.exit(1)
 
-    # Build LSH index from installed
-    all_installed_files = []
-    for plugin in installed:
-        label = f"{plugin.name}@{plugin.marketplace}"
-        files = scan_directory_for_content(plugin.install_path, label)
-        all_installed_files.extend(files)
+    if not baseline_files:
+        print(f"No files found in baseline: {baseline_spec}")
+        sys.exit(1)
 
     lsh = MinHashLSH(threshold=SIMILARITY_THRESHOLD, num_perm=NUM_PERM)
-    for i, f in enumerate(all_installed_files):
+    for i, f in enumerate(baseline_files):
         if f.minhash:
             lsh.insert(str(i), f.minhash)
 
-    print(f"Indexed {len(all_installed_files)} files from installed plugins.\n")
+    print(f"Indexed {len(baseline_files)} files from {baseline_spec}.\n")
 
     print(f"Comparing: {target_name}")
     print(f"Path: {target_path}\n")
@@ -223,13 +223,13 @@ def cmd_compare(args):
             best_match = None
 
             for idx in match_indices:
-                if idx < len(all_installed_files):
-                    installed_f = all_installed_files[idx]
-                    if installed_f.minhash:
-                        sim = tf.minhash.jaccard(installed_f.minhash)
+                if idx < len(baseline_files):
+                    baseline_f = baseline_files[idx]
+                    if baseline_f.minhash:
+                        sim = tf.minhash.jaccard(baseline_f.minhash)
                         if sim > best_sim:
                             best_sim = sim
-                            best_match = installed_f
+                            best_match = baseline_f
 
             if best_sim >= 0.9:
                 redundant.append({
@@ -249,7 +249,8 @@ def cmd_compare(args):
     # Output
     total = len(target_files)
     print(f"{'=' * 50}")
-    print(f"COMPARISON RESULT: {target_name}")
+    print(f"COMPARISON: {target_name}")
+    print(f"vs BASELINE: {baseline_spec}")
     print(f"{'=' * 50}")
     print(f"Files in target:      {total}")
     print(f"Novel (not similar):  {len(novel)} ({len(novel)/total*100:.0f}%)" if total else "Novel: 0")
@@ -301,17 +302,17 @@ def cmd_impact(args):
         target_path = marketplace_path
         target_name = marketplace_name
 
-    print(f"Analyzing: {target_name}...")
+    baseline_spec = getattr(args, 'baseline', 'installed')
+    print(f"Analyzing: {target_name} vs {baseline_spec}...")
 
-    installed = load_installed_plugins()
-    all_installed_files = []
-    for plugin in installed:
-        label = f"{plugin.name}@{plugin.marketplace}"
-        files = scan_directory_for_content(plugin.install_path, label)
-        all_installed_files.extend(files)
+    try:
+        baseline_files = load_baseline_files(baseline_spec)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
     lsh = MinHashLSH(threshold=SIMILARITY_THRESHOLD, num_perm=NUM_PERM)
-    for i, f in enumerate(all_installed_files):
+    for i, f in enumerate(baseline_files):
         if f.minhash:
             lsh.insert(str(i), f.minhash)
 
@@ -327,12 +328,11 @@ def cmd_impact(args):
         if not matches:
             novel += 1
         else:
-            # Check best similarity
             best_sim = 0.0
             for m in matches:
                 idx = int(m)
-                if idx < len(all_installed_files) and all_installed_files[idx].minhash:
-                    sim = tf.minhash.jaccard(all_installed_files[idx].minhash)
+                if idx < len(baseline_files) and baseline_files[idx].minhash:
+                    sim = tf.minhash.jaccard(baseline_files[idx].minhash)
                     best_sim = max(best_sim, sim)
             if best_sim >= 0.9:
                 redundant += 1
@@ -340,12 +340,12 @@ def cmd_impact(args):
                 novel += 1
 
     total = len(target_files)
-    print(f"\n{target_name}: {total} files")
+    print(f"\n{target_name} vs {baseline_spec}: {total} files")
     print(f"  → {novel} new, {redundant} redundant")
 
     if total > 0:
         if redundant / total > 0.5:
-            print(f"  → High overlap with existing plugins")
+            print(f"  → High overlap with baseline")
         elif novel > redundant:
             print(f"  → Mostly new content")
 
@@ -708,13 +708,17 @@ def main():
     where_p.add_argument("query", help="Filename or pattern")
 
     # compare
-    compare_p = subparsers.add_parser("compare", help="Compare against installed plugins")
+    compare_p = subparsers.add_parser("compare", help="Compare against a baseline")
     compare_p.add_argument("target", help="marketplace or marketplace/plugin")
+    compare_p.add_argument("--baseline", "-b", default="installed",
+                           help="Baseline: 'installed', marketplace, or marketplace/plugin (default: installed)")
     compare_p.add_argument("-v", "--verbose", action="store_true")
 
     # impact
     impact_p = subparsers.add_parser("impact", help="Quick impact summary")
     impact_p.add_argument("target", help="marketplace or marketplace/plugin")
+    impact_p.add_argument("--baseline", "-b", default="installed",
+                           help="Baseline: 'installed', marketplace, or marketplace/plugin (default: installed)")
 
     # installed
     installed_p = subparsers.add_parser("installed", help="List installed plugins")
