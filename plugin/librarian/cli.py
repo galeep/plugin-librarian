@@ -202,6 +202,173 @@ def cmd_where(args):
 
 
 # ============================================================================
+# COMPARE-MARKETPLACES command: Direct marketplace-to-marketplace comparison
+# ============================================================================
+
+def cmd_compare_marketplaces(args):
+    """Compare two marketplaces directly showing overlap and unique content."""
+    marketplace_a = args.marketplace_a
+    marketplace_b = args.marketplace_b
+
+    # Find marketplace paths
+    mp_a_path = find_marketplace_path(marketplace_a)
+    if not mp_a_path:
+        print(f"Marketplace not found: {marketplace_a}")
+        available = [m.name for m in MARKETPLACES_DIR.iterdir() if m.is_dir()]
+        print(f"Available: {', '.join(sorted(available)[:10])}...")
+        sys.exit(1)
+
+    mp_b_path = find_marketplace_path(marketplace_b)
+    if not mp_b_path:
+        print(f"Marketplace not found: {marketplace_b}")
+        available = [m.name for m in MARKETPLACES_DIR.iterdir() if m.is_dir()]
+        print(f"Available: {', '.join(sorted(available)[:10])}...")
+        sys.exit(1)
+
+    print(f"Comparing marketplaces:")
+    print(f"  A: {marketplace_a} ({mp_a_path})")
+    print(f"  B: {marketplace_b} ({mp_b_path})")
+    print()
+
+    # Scan both marketplaces
+    print(f"Scanning marketplace A: {marketplace_a}...")
+    files_a = scan_directory_for_content(mp_a_path, marketplace_a)
+    print(f"Found {len(files_a)} content files in {marketplace_a}")
+
+    print(f"Scanning marketplace B: {marketplace_b}...")
+    files_b = scan_directory_for_content(mp_b_path, marketplace_b)
+    print(f"Found {len(files_b)} content files in {marketplace_b}")
+    print()
+
+    # Build LSH index for marketplace A
+    print("Building LSH index for marketplace A...")
+    lsh = MinHashLSH(threshold=SIMILARITY_THRESHOLD, num_perm=NUM_PERM)
+
+    fingerprints_a = {}
+    for i, f in enumerate(files_a):
+        if f.minhash:
+            key = f"a_{i}"
+            lsh.insert(key, f.minhash)
+            fingerprints_a[key] = f
+
+    # Query with marketplace B to find overlaps
+    print("Finding overlaps with marketplace B...")
+
+    shared_b_indices = set()
+    shared_a_keys = set()
+    overlap_pairs = []
+
+    for j, f_b in enumerate(files_b):
+        if f_b.minhash is None:
+            continue
+
+        matches = lsh.query(f_b.minhash)
+
+        if matches:
+            # Found overlap
+            shared_b_indices.add(j)
+
+            # Calculate best match from A
+            best_sim = 0.0
+            best_match_key = None
+
+            for match_key in matches:
+                if match_key in fingerprints_a:
+                    f_a = fingerprints_a[match_key]
+                    sim = f_b.minhash.jaccard(f_a.minhash)
+                    if sim > best_sim:
+                        best_sim = sim
+                        best_match_key = match_key
+
+            if best_match_key:
+                shared_a_keys.add(best_match_key)
+                overlap_pairs.append({
+                    "file_a": fingerprints_a[best_match_key].relative_path,
+                    "file_b": f_b.relative_path,
+                    "similarity": round(best_sim, 3),
+                })
+
+    # Compute set statistics
+    a_only_count = len(files_a) - len(shared_a_keys)
+    b_only_count = len(files_b) - len(shared_b_indices)
+    shared_count = len(shared_b_indices)
+
+    total_a = len(files_a)
+    total_b = len(files_b)
+
+    # Sort overlap pairs by similarity
+    overlap_pairs.sort(key=lambda x: x["similarity"], reverse=True)
+
+    # Output Venn diagram statistics
+    print(f"{'=' * 60}")
+    print(f"MARKETPLACE COMPARISON: {marketplace_a} vs {marketplace_b}")
+    print(f"{'=' * 60}")
+    print()
+    print("Venn Diagram Statistics:")
+    print(f"  {marketplace_a} total files:        {total_a}")
+    print(f"  {marketplace_b} total files:        {total_b}")
+    print()
+    print(f"  Shared (overlap):           {shared_count} files")
+    print(f"    {marketplace_a} overlap %:        {shared_count/total_a*100:.1f}%" if total_a > 0 else "  A overlap %: N/A")
+    print(f"    {marketplace_b} overlap %:        {shared_count/total_b*100:.1f}%" if total_b > 0 else "  B overlap %: N/A")
+    print()
+    print(f"  {marketplace_a} only (unique):      {a_only_count} files ({a_only_count/total_a*100:.1f}%)" if total_a > 0 else f"  {marketplace_a} only: 0 files")
+    print(f"  {marketplace_b} only (unique):      {b_only_count} files ({b_only_count/total_b*100:.1f}%)" if total_b > 0 else f"  {marketplace_b} only: 0 files")
+    print()
+
+    # Edge cases
+    if total_a == 0 or total_b == 0:
+        print("WARNING: One or both marketplaces have no content files.")
+    elif shared_count == total_a == total_b:
+        print("RESULT: Identical marketplaces (100% overlap)")
+    elif shared_count == 0:
+        print("RESULT: Disjoint marketplaces (0% overlap)")
+    else:
+        print(f"RESULT: Partial overlap ({shared_count/max(total_a, total_b)*100:.1f}% of larger marketplace)")
+
+    print()
+
+    # Show top overlaps
+    if overlap_pairs:
+        top_n = min(10, len(overlap_pairs))
+        print(f"Top {top_n} overlapping files (by similarity):")
+        for i, pair in enumerate(overlap_pairs[:top_n], 1):
+            print(f"  {i}. {pair['similarity']*100:.0f}% similar")
+            print(f"     A: {pair['file_a']}")
+            print(f"     B: {pair['file_b']}")
+        if len(overlap_pairs) > top_n:
+            print(f"  ... and {len(overlap_pairs) - top_n} more overlapping files")
+    else:
+        print("No overlapping files found.")
+
+    print()
+
+    # JSON output if requested
+    if getattr(args, 'json', False):
+        json_output = {
+            "marketplace_a": {
+                "name": marketplace_a,
+                "total_files": total_a,
+                "unique_files": a_only_count,
+                "shared_files": len(shared_a_keys),
+            },
+            "marketplace_b": {
+                "name": marketplace_b,
+                "total_files": total_b,
+                "unique_files": b_only_count,
+                "shared_files": shared_count,
+            },
+            "overlap": {
+                "shared_count": shared_count,
+                "a_overlap_percentage": round(shared_count/total_a*100, 1) if total_a > 0 else 0,
+                "b_overlap_percentage": round(shared_count/total_b*100, 1) if total_b > 0 else 0,
+            },
+            "top_overlaps": overlap_pairs[:20],
+        }
+        print(json.dumps(json_output, indent=2))
+
+
+# ============================================================================
 # COMPARE command: Compare against installed plugins
 # ============================================================================
 
@@ -1134,6 +1301,16 @@ def main():
     where_p = subparsers.add_parser("where", help="Find locations of similar files")
     where_p.add_argument("query", help="Filename or pattern")
 
+    # compare-marketplaces
+    compare_mp_p = subparsers.add_parser("compare-marketplaces",
+                                          help="Compare two marketplaces directly (A vs B)")
+    compare_mp_p.add_argument("--marketplace-a", "-a", required=True,
+                              help="First marketplace to compare")
+    compare_mp_p.add_argument("--marketplace-b", "-b", required=True,
+                              help="Second marketplace to compare")
+    compare_mp_p.add_argument("--json", action="store_true",
+                              help="Output results as JSON")
+
     # compare
     compare_p = subparsers.add_parser("compare", help="Compare against a baseline")
     compare_p.add_argument("target", help="marketplace or marketplace/plugin")
@@ -1177,6 +1354,8 @@ def main():
         cmd_scan(args)
     elif args.command == "where":
         cmd_where(args)
+    elif args.command == "compare-marketplaces":
+        cmd_compare_marketplaces(args)
     elif args.command == "compare":
         cmd_compare(args)
     elif args.command == "impact":
