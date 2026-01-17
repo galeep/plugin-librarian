@@ -1,0 +1,9 @@
+{
+  "name": "librarian",
+  "version": "0.1.0",
+  "description": "Navigate the Claude Code plugin ecosystem with awareness before install",
+  "author": {
+    "name": "Gale Fagan",
+    "email": "gep@fagan.io"
+  }
+}
