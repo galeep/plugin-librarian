@@ -35,8 +35,11 @@ node_modules/
 # tasks.json
 # tasks/
 
-# Claude-mem auto-generated files
-**/CLAUDE.md
+# Claude-mem auto-generated files (keep root CLAUDE.md)
+.taskmaster/**/CLAUDE.md
+.claude/**/CLAUDE.md
+plugin/**/CLAUDE.md
+tests/CLAUDE.md
 
 # Agent scratch files
 test_*.py
