@@ -923,6 +923,156 @@ def cmd_stats(args):
 
 
 # ============================================================================
+# MARKETPLACE-LEVEL command: Aggregate similarity at marketplace level
+# ============================================================================
+
+def cmd_marketplace_level(args):
+    """Compute marketplace-level similarity matrix."""
+    if not SIMILARITY_REPORT.exists():
+        print(f"Error: Index not found. Run 'librarian scan' first.")
+        sys.exit(1)
+
+    with open(SIMILARITY_REPORT) as fh:
+        report = json.load(fh)
+
+    # Build marketplace -> files mapping from file_index
+    mp_files = defaultdict(set)
+    if "file_index" in report:
+        for f in report["file_index"]:
+            mp_files[f["marketplace"]].add(f["file_index"])
+    else:
+        # Fallback for old format: extract from clusters
+        for cluster in report["clusters"]:
+            for loc in cluster["locations"]:
+                mp_files[loc["marketplace"]].add(
+                    (loc["marketplace"], loc["plugin"], loc["path"])
+                )
+
+    # Build marketplace -> cluster IDs mapping
+    mp_clusters = defaultdict(set)
+    if "marketplace_index" in report:
+        for mp, cluster_ids in report["marketplace_index"].items():
+            mp_clusters[mp] = set(cluster_ids)
+    else:
+        # Fallback for old format
+        for idx, cluster in enumerate(report["clusters"]):
+            cluster_id = cluster.get("cluster_id", idx)
+            for mp in cluster["marketplaces"]:
+                mp_clusters[mp].add(cluster_id)
+
+    marketplaces = sorted(mp_clusters.keys())
+    n = len(marketplaces)
+
+    if n == 0:
+        print("No marketplaces found in index.")
+        sys.exit(1)
+
+    print(f"Computing similarity matrix for {n} marketplaces...")
+    print()
+
+    # Compute pairwise similarity matrix
+    # Using Jaccard similarity on shared clusters
+    matrix = {}
+    for i, mp_a in enumerate(marketplaces):
+        matrix[mp_a] = {}
+        clusters_a = mp_clusters[mp_a]
+        for j, mp_b in enumerate(marketplaces):
+            clusters_b = mp_clusters[mp_b]
+            intersection = len(clusters_a & clusters_b)
+            union = len(clusters_a | clusters_b)
+            if union > 0:
+                jaccard = intersection / union
+            else:
+                jaccard = 0.0
+            matrix[mp_a][mp_b] = round(jaccard, 3)
+
+    # Find top similar pairs (excluding self-comparisons)
+    pairs = []
+    for i, mp_a in enumerate(marketplaces):
+        for j, mp_b in enumerate(marketplaces):
+            if i < j:  # Upper triangle only
+                sim = matrix[mp_a][mp_b]
+                if sim > 0:
+                    pairs.append((mp_a, mp_b, sim))
+
+    pairs.sort(key=lambda x: x[2], reverse=True)
+
+    if getattr(args, 'json', False):
+        json_output = {
+            "marketplaces": marketplaces,
+            "file_counts": {mp: len(mp_files[mp]) for mp in marketplaces},
+            "cluster_counts": {mp: len(mp_clusters[mp]) for mp in marketplaces},
+            "similarity_matrix": matrix,
+            "top_pairs": [
+                {"marketplace_a": a, "marketplace_b": b, "similarity": s}
+                for a, b, s in pairs[:20]
+            ],
+        }
+        print(json.dumps(json_output, indent=2))
+        return
+
+    # Text output
+    print(f"{'=' * 60}")
+    print("MARKETPLACE SIMILARITY MATRIX")
+    print(f"{'=' * 60}")
+    print(f"Marketplaces analyzed: {n}")
+    print()
+
+    # Show marketplace stats
+    print("Marketplace Statistics:")
+    stats = [(mp, len(mp_files[mp]), len(mp_clusters[mp])) for mp in marketplaces]
+    stats.sort(key=lambda x: x[1], reverse=True)
+    for mp, file_count, cluster_count in stats[:15]:
+        print(f"  {mp[:30]:<30} {file_count:>5} files, {cluster_count:>4} clusters")
+    if len(stats) > 15:
+        print(f"  ... and {len(stats) - 15} more marketplaces")
+    print()
+
+    # Show top similar pairs
+    if pairs:
+        print("Top Similar Marketplace Pairs:")
+        for mp_a, mp_b, sim in pairs[:15]:
+            bar = "█" * int(sim * 20)
+            print(f"  {mp_a[:20]:<20} ↔ {mp_b[:20]:<20} {sim*100:>5.1f}% {bar}")
+        if len(pairs) > 15:
+            print(f"  ... and {len(pairs) - 15} more pairs with overlap")
+    else:
+        print("No marketplace pairs share clusters (all disjoint).")
+    print()
+
+    # Show heatmap if requested
+    if getattr(args, 'heatmap', False):
+        print("Similarity Heatmap (truncated names):")
+        # Header row
+        header = "          "
+        for mp in marketplaces[:12]:
+            header += f"{mp[:6]:>7}"
+        print(header)
+
+        # Data rows
+        for mp_a in marketplaces[:12]:
+            row = f"{mp_a[:9]:<9} "
+            for mp_b in marketplaces[:12]:
+                sim = matrix[mp_a][mp_b]
+                if sim >= 0.8:
+                    char = "██"
+                elif sim >= 0.5:
+                    char = "▓▓"
+                elif sim >= 0.2:
+                    char = "▒▒"
+                elif sim > 0:
+                    char = "░░"
+                else:
+                    char = "  "
+                row += f"{char:>7}"
+            print(row)
+        print()
+        print("Legend: ██ ≥80%  ▓▓ ≥50%  ▒▒ ≥20%  ░░ >0%")
+        if n > 12:
+            print(f"(Showing 12x12 of {n}x{n} matrix)")
+
+
+# ============================================================================
 # DESCRIBE command: Skill introspection
 # ============================================================================
 
@@ -1537,6 +1687,14 @@ def main():
     # stats
     subparsers.add_parser("stats", help="Show index statistics")
 
+    # marketplace-level
+    mp_level_p = subparsers.add_parser("marketplace-level",
+                                        help="Compute marketplace-level similarity matrix")
+    mp_level_p.add_argument("--json", action="store_true",
+                            help="Output results as JSON")
+    mp_level_p.add_argument("--heatmap", action="store_true",
+                            help="Show ASCII heatmap visualization")
+
     # checkout
     checkout_p = subparsers.add_parser("checkout", help="Copy a skill/agent to local directory")
     checkout_p.add_argument("skill", help="Skill spec: skill_name, marketplace/skill, or marketplace/plugin/skill")
@@ -1567,6 +1725,8 @@ def main():
         cmd_find(args)
     elif args.command == "stats":
         cmd_stats(args)
+    elif args.command == "marketplace-level":
+        cmd_marketplace_level(args)
     elif args.command == "checkout":
         cmd_checkout(args)
     elif args.command == "describe":
