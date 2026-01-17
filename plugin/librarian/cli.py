@@ -240,19 +240,22 @@ def cmd_compare_marketplaces(args):
     print(f"Found {len(files_b)} content files in {marketplace_b}")
     print()
 
-    # Build LSH index for marketplace A
+    # Build LSH index for marketplace A (only files with minhash)
     print("Building LSH index for marketplace A...")
     lsh = MinHashLSH(threshold=SIMILARITY_THRESHOLD, num_perm=NUM_PERM)
 
     fingerprints_a = {}
+    files_a_with_minhash = 0
     for i, f in enumerate(files_a):
         if f.minhash:
             key = f"a_{i}"
             lsh.insert(key, f.minhash)
             fingerprints_a[key] = f
+            files_a_with_minhash += 1
 
-    # Query with marketplace B to find overlaps
+    # Query with marketplace B to find overlaps (only files with minhash)
     print("Finding overlaps with marketplace B...")
+    files_b_with_minhash = sum(1 for f in files_b if f.minhash)
 
     shared_b_indices = set()
     shared_a_keys = set()
@@ -288,13 +291,13 @@ def cmd_compare_marketplaces(args):
                     "similarity": round(best_sim, 3),
                 })
 
-    # Compute set statistics
-    a_only_count = len(files_a) - len(shared_a_keys)
-    b_only_count = len(files_b) - len(shared_b_indices)
+    # Compute set statistics (only counting files with minhash)
+    a_only_count = files_a_with_minhash - len(shared_a_keys)
+    b_only_count = files_b_with_minhash - len(shared_b_indices)
     shared_count = len(shared_b_indices)
 
-    total_a = len(files_a)
-    total_b = len(files_b)
+    total_a = files_a_with_minhash
+    total_b = files_b_with_minhash
 
     # Sort overlap pairs by similarity
     overlap_pairs.sort(key=lambda x: x["similarity"], reverse=True)
@@ -345,12 +348,13 @@ def cmd_compare_marketplaces(args):
 
     # JSON output if requested
     if getattr(args, 'json', False):
+        top_n = 10  # Match human-readable output
         json_output = {
             "marketplace_a": {
                 "name": marketplace_a,
                 "total_files": total_a,
                 "unique_files": a_only_count,
-                "shared_files": len(shared_a_keys),
+                "shared_files": shared_count,
             },
             "marketplace_b": {
                 "name": marketplace_b,
@@ -363,7 +367,7 @@ def cmd_compare_marketplaces(args):
                 "a_overlap_percentage": round(shared_count/total_a*100, 1) if total_a > 0 else 0,
                 "b_overlap_percentage": round(shared_count/total_b*100, 1) if total_b > 0 else 0,
             },
-            "top_overlaps": overlap_pairs[:20],
+            "top_overlaps": overlap_pairs[:top_n],
         }
         print(json.dumps(json_output, indent=2))
 

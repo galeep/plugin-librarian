@@ -2,9 +2,8 @@
 """Tests for marketplace-to-marketplace comparison functionality."""
 
 import sys
-import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 # Add parent directory to path to import librarian module
 sys.path.insert(0, str(Path(__file__).parent.parent / "plugin"))
