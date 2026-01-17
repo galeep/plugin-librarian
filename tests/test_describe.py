@@ -30,7 +30,7 @@ def test_analyze_skill_content_tools():
 
 def test_analyze_skill_content_complexity_low():
     """Test low complexity detection."""
-    content = "Short skill with few words.\n" * 10  # ~50 lines, ~50 words
+    content = "Short skill with few words.\n" * 10  # 10 lines, ~50 words
     result = analyze_skill_content(content)
 
     assert result["complexity_score"] == "low"

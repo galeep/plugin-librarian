@@ -6,6 +6,7 @@ import fnmatch
 import json
 import re
 import sys
+import textwrap
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -905,7 +906,6 @@ def cmd_describe(args):
     if skill_info.description:
         print(f"\nDescription:")
         # Word wrap description at word boundaries
-        import textwrap
         wrapped = textwrap.wrap(skill_info.description, width=70)
         for line in wrapped:
             print(f"  {line}")
