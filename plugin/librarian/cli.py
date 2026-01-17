@@ -255,9 +255,11 @@ def cmd_compare(args):
                 report = json.load(fh)
                 total_clusters = report.get("summary", {}).get("unique_clusters", 0)
         except (json.JSONDecodeError, KeyError):
+            # Report may be missing, malformed, or lack expected fields
             pass
 
     # Perform sanity checks
+    total = len(target_files)
     sanity_result = check_similarity_sanity(
         total_files=total,
         novel_count=len(novel),

@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 """Integration tests for CLI sanity checks."""
 
-import json
 import sys
-import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "plugin"))
 
-from librarian import cli
 from librarian.core import check_similarity_sanity
 
 
@@ -137,21 +133,21 @@ def test_warning_thresholds():
     cluster_warnings = [w for w in result.warnings if "cluster membership" in w]
     assert len(cluster_warnings) == 0
 
-    # At threshold: warning
+    # Above threshold: triggers warning
     result = check_similarity_sanity(
         total_files=1000,
         novel_count=1000,
         redundant_count=0,
-        total_clusters=1001,  # Above 1000 threshold
+        total_clusters=1001,  # Above 1000 threshold (condition is > 1000)
     )
     cluster_warnings = [w for w in result.warnings if "cluster membership" in w]
     assert len(cluster_warnings) > 0
 
-    # Small dataset: no ratio warnings
+    # Small dataset: no ratio warnings even with low redundancy
     result = check_similarity_sanity(
         total_files=400,  # Below 500 threshold
         novel_count=380,
-        redundant_count=20,  # 5% - would trigger on large dataset
+        redundant_count=20,  # 5% - but small dataset exempts from ratio check
         total_clusters=100,
     )
     ratio_warnings = [w for w in result.warnings if "ratio" in w.lower()]

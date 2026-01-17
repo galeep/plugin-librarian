@@ -78,7 +78,7 @@ def test_extreme_ratios_small_dataset_no_warning():
     result = check_similarity_sanity(
         total_files=200,  # Below 500 threshold
         novel_count=190,
-        redundant_count=10,  # 5% - would trigger on large dataset
+        redundant_count=10,  # 5% - but small dataset exempts from ratio check
         total_clusters=0,
     )
 

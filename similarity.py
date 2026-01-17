@@ -96,17 +96,43 @@ class SimilarityCluster:
 
 
 def tokenize(text: str) -> set[str]:
-    """Convert text to set of shingles (n-grams)."""
-    # Normalize: lowercase, collapse whitespace, remove punctuation
+    """Convert text to set of shingles (n-grams).
+
+    Uses word-level shingles (n-grams) for content similarity detection.
+    For very short documents, falls back to character-level shingles.
+
+    Args:
+        text: Input text to tokenize
+
+    Returns:
+        Set of shingles (word n-grams or character n-grams for short text)
+    """
+    # Normalize: lowercase and collapse whitespace
     text = text.lower()
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
 
-    # Generate shingles
-    words = text.split()
+    # DESIGN RATIONALE: Keep dashes and alphanumerics
+    # Markdown files have frontmatter (key: value), code blocks, headers (#, ##)
+    # Removing ALL punctuation was too aggressive and caused empty shingle sets
+    # Now we keep dashes (important for YAML keys, multi-word terms)
+    text = re.sub(r'[^a-z0-9\s\-]', '', text)
+
+    # Split and filter empty strings
+    words = [w for w in text.split() if w]
+
+    # Handle short documents with fallback to character-level shingles
     if len(words) < SHINGLE_SIZE:
-        return set(words)
+        if words:
+            # Return individual words for very short docs
+            return set(words)
+        elif len(text) >= SHINGLE_SIZE:
+            # Fallback: character-level shingles for docs with no words
+            return set(text[i:i+SHINGLE_SIZE] for i in range(len(text) - SHINGLE_SIZE + 1))
+        else:
+            # Last resort: return the text itself as a single shingle
+            return {text} if text else set()
 
+    # Generate word-level shingles (n-grams)
     shingles = set()
     for i in range(len(words) - SHINGLE_SIZE + 1):
         shingle = ' '.join(words[i:i + SHINGLE_SIZE])
