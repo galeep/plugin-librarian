@@ -5,14 +5,17 @@ Navigate the Claude Code plugin ecosystem with awareness before install.
 ## Installation
 
 ```bash
-# 1. Install the plugin
-claude plugins add /path/to/plugin-librarian/plugin
+# 1. Add the marketplace
+claude plugin marketplace add galeep/plugin-librarian
 
-# 2. Run init (one-time)
+# 2. Install the plugin
+claude plugin install librarian
+
+# 3. Run init (one-time, in a Claude session)
 /librarian init
 ```
 
-That's it. Init creates the Python environment and builds the similarity index.
+Init creates the Python environment and builds the similarity index.
 
 ## Commands
 
