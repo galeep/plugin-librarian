@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "local-dev",
-  "description": "Local development plugins",
+  "name": "plugin-librarian",
+  "description": "Navigate the Claude Code plugin ecosystem with awareness before install",
   "owner": {
     "name": "Gale Fagan",
     "email": "gep@fagan.io"
