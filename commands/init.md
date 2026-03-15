@@ -1,14 +1,21 @@
 ---
-description: One-time setup - creates Python environment and builds the similarity index (alias for setup)
+description: One-time setup - creates Python environment and builds the similarity index
 allowed-tools: ["Bash"]
 ---
 
 # Plugin Librarian Setup
 
-Run this once after installing the plugin to set up the Python environment and build the similarity index.
+Run this once after installing the plugin. It creates a Python venv, installs dependencies, and scans all your marketplaces to build a similarity index. The scan reads every .md file across all registered marketplaces and computes MinHash signatures, so it takes 1-3 minutes depending on how many marketplaces you have.
+
+Tell the user this will take a minute or two before running the script.
 
 ```bash
 cd "${CLAUDE_PLUGIN_ROOT}"
+
+echo "Setting up Plugin Librarian..."
+echo "This creates a Python environment, installs dependencies, and scans"
+echo "all your marketplaces. Expect 1-3 minutes depending on marketplace count."
+echo ""
 
 # Find a working Python 3 interpreter
 PYTHON=""
@@ -22,7 +29,6 @@ for cmd in python3 python; do
 done
 
 if [ -z "$PYTHON" ]; then
-    echo ""
     echo "ERROR: Python 3.8+ is required but not found in PATH."
     echo ""
     echo "Install Python 3 and ensure it's in your PATH."
@@ -31,7 +37,7 @@ fi
 
 # Check prerequisites
 if [ ! -d ".venv" ]; then
-    echo "Using $PYTHON ($(\"$PYTHON\" --version 2>&1))"
+    echo "Using $PYTHON ($("$PYTHON" --version 2>&1))"
     echo "Checking prerequisites..."
     if ! "$PYTHON" -c "import venv" 2>/dev/null; then
         echo ""
@@ -65,7 +71,10 @@ if ! .venv/bin/pip install -q .; then
     exit 1
 fi
 
-echo "Building similarity index (this may take a minute)..."
+echo ""
+echo "Building similarity index..."
+echo "Scanning all registered marketplaces (this is the slow part)."
+echo ""
 if ! .venv/bin/librarian scan; then
     echo ""
     echo "ERROR: Failed to build similarity index."
@@ -79,10 +88,3 @@ echo "  /librarian where <file>     - Find similar files"
 echo "  /librarian compare <target> - Compare against installed"
 echo "  /librarian impact <target>  - Quick install assessment"
 ```
-
-This will:
-1. Create a Python virtual environment in the plugin directory
-2. Install the librarian CLI and dependencies
-3. Scan all marketplaces and build the similarity index
-
-After setup, all other `/librarian` commands will work automatically.

@@ -1455,11 +1455,10 @@ def cmd_scan(args):
     print(f"Similarity threshold: {threshold * 100:.0f}%\n")
 
     files = []
-    for mp in sorted(scan_dir.iterdir()):
-        if not mp.is_dir() or mp.name.startswith("."):
-            continue
-        if mp.name in excludes:
-            continue
+    mp_dirs = sorted(d for d in scan_dir.iterdir() if d.is_dir() and not d.name.startswith(".") and d.name not in excludes)
+    for mp_i, mp in enumerate(mp_dirs, 1):
+        print(f"  [{mp_i}/{len(mp_dirs)}] {mp.name}...", end="", flush=True)
+        mp_count = 0
 
         for md_file in mp.rglob("*.md"):
             if "backup" in str(md_file).lower():
@@ -1494,10 +1493,13 @@ def cmd_scan(args):
                     full_path=str(md_file),
                     content=content,
                 ))
+                mp_count += 1
             except OSError as e:
                 print(f"  Warning: {md_file}: {e}", file=sys.stderr)
 
-    print(f"Found {len(files)} content files (>100 chars)")
+        print(f" {mp_count} files")
+
+    print(f"\nFound {len(files)} content files total")
 
     print("Building MinHash signatures...")
     lsh = MinHashLSH(threshold=threshold, num_perm=NUM_PERM)
@@ -1506,6 +1508,7 @@ def cmd_scan(args):
     files_indexed = 0
     files_skipped = 0
     empty_shingles = []
+    total = len(files)
 
     for i, f in enumerate(files):
         shingles = tokenize(f.content)
@@ -1517,6 +1520,9 @@ def cmd_scan(args):
             files_skipped += 1
             empty_shingles.append(f"{f.marketplace}/{f.plugin}/{f.relative_path}")
         f.content = ""  # Free memory; content no longer needed after hashing
+
+        if (i + 1) % 500 == 0 or i + 1 == total:
+            print(f"  {i + 1}/{total} hashed", flush=True)
 
     print(f"Indexed {files_indexed} files into LSH")
     if files_skipped > 0:
