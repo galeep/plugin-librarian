@@ -42,3 +42,9 @@ Requires Python 3.10+. The init step scans every marketplace you have registered
 The scanner reads every `.md` file across all registered marketplaces, computes word-level MinHash signatures (128 permutations, 3-shingle), and indexes them in a locality-sensitive hash. Queries against this index run in milliseconds. Two files are considered similar at 70%+ estimated Jaccard similarity.
 
 The tool reports observable facts about content similarity and location. It does not make claims about provenance or authorship.
+
+## Citation
+
+If you use Plugin Librarian in your research, please cite:
+
+Fagan, G. (2026). Librarian Catches Thief: Surfacing Supply Chain Attack Campaigns via Document Similarity in an AI Agent Skill Registry. Zenodo. https://doi.org/10.5281/zenodo.19035380
