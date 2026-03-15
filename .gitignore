@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Generated index files
+catalog.json
+similarity_report.json
+location_index.json
+
+# Logs
+*.log
+
+# Environment variables
+.env
+
+# Editor directories
+.idea
+.vscode
+*.sw?
+
+# OS specific
+.DS_Store

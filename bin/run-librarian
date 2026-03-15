@@ -1,0 +1,33 @@
+#!/bin/bash
+# Wrapper script to run librarian CLI
+# Tries: PATH, then local venv, then error
+
+# If librarian is in PATH, use it
+if command -v librarian &> /dev/null; then
+    exec librarian "$@"
+fi
+
+# Find the plugin root (this script is in bin/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Try local venv
+if [ -x "$PLUGIN_ROOT/.venv/bin/librarian" ]; then
+    exec "$PLUGIN_ROOT/.venv/bin/librarian" "$@"
+fi
+
+# Try parent directory venv (if plugin/ is a subdirectory)
+PARENT_ROOT="$(dirname "$PLUGIN_ROOT")"
+if [ -x "$PARENT_ROOT/.venv/bin/librarian" ]; then
+    exec "$PARENT_ROOT/.venv/bin/librarian" "$@"
+fi
+
+# Error with instructions
+echo "Error: librarian CLI not found."
+echo ""
+echo "Install it with:"
+echo "  cd $PLUGIN_ROOT && pip install ."
+echo ""
+echo "Or if using a virtual environment:"
+echo "  cd $PLUGIN_ROOT && python -m venv .venv && source .venv/bin/activate && pip install ."
+exit 1

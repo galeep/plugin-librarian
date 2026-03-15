@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Query similarity clusters by author, skill name, path fragment, or content.
+
+Usage:
+  cluster-query [--report PATH] [--limit N] author <name>
+  cluster-query [--report PATH] [--limit N] skill <name>
+  cluster-query [--report PATH] [--limit N] path <fragment>
+  cluster-query [--report PATH] [--limit N] grep <pattern> --dir <base_dir>
+  cluster-query [--report PATH] summary
+"""
+import argparse
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+DEFAULT_REPORT = Path.home() / ".librarian" / "similarity_report.json"
+
+
+def err(msg):
+    print(msg, file=sys.stderr)
+
+
+def load_report(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        err(f"Error: {path} contains invalid JSON: {e}")
+        err("The report may be corrupted. Re-run 'librarian scan' to regenerate.")
+        sys.exit(1)
+    except OSError as e:
+        err(f"Error reading report: {e}")
+        sys.exit(1)
+
+
+def extract_author(path):
+    """Extract author from path like 'skills/<author>/<skill>/...'."""
+    parts = path.split("/")
+    if parts[0] == "skills" and len(parts) >= 2:
+        return parts[1]
+    return parts[0]
+
+
+def extract_skill(path):
+    """Extract skill name from path like 'skills/<author>/<skill>/...'."""
+    parts = path.split("/")
+    if parts[0] == "skills" and len(parts) >= 3:
+        return parts[2]
+    if len(parts) >= 2:
+        return parts[1]
+    return parts[0]
+
+
+def print_cluster(c, highlight=None):
+    cid = c.get("cluster_id", "?")
+    print(f"  Cluster {cid}: {c['size']} files, "
+          f"{c['avg_similarity']*100:.1f}% sim, type={c['type']}")
+    for loc in c["locations"]:
+        author = extract_author(loc["path"]).lower()
+        # Case-insensitive highlight comparison
+        highlight_lower = {h.lower() for h in highlight} if highlight else set()
+        marker = "* " if highlight_lower and author in highlight_lower else "  "
+        print(f"    {marker}{loc['path']}")
+
+
+def find_and_display(clusters, predicate, header, no_match_msg, limit,
+                     highlight=None):
+    """Filter clusters by predicate, display sorted results with overflow."""
+    matches = [c for c in clusters if predicate(c)]
+    if not matches:
+        print(no_match_msg)
+        return
+    print(header(matches) if callable(header) else header)
+    print()
+    for c in sorted(matches, key=lambda x: x["size"], reverse=True)[:limit]:
+        print_cluster(c, highlight=highlight)
+        print()
+    if len(matches) > limit:
+        print(f"  ... and {len(matches) - limit} more clusters")
+
+
+def cmd_author(args, report):
+    query = args.query
+    ql = query.lower()
+
+    # Exact match on author name
+    def matches_author(c):
+        authors = {extract_author(loc["path"]).lower() for loc in c["locations"]}
+        return ql in authors
+
+    def header(matches):
+        total_files = sum(c["size"] for c in matches)
+        return f"Author '{query}': {len(matches)} clusters, {total_files} files"
+
+    find_and_display(
+        report["clusters"], matches_author, header,
+        f"No clusters contain author: {query}", args.limit, highlight={query})
+
+
+def cmd_skill(args, report):
+    query = args.query
+    ql = query.lower()
+    # Substring match to allow partial skill names
+    find_and_display(
+        report["clusters"],
+        lambda c: any(ql in extract_skill(loc["path"]).lower()
+                       for loc in c["locations"]),
+        lambda m: f"Skill matching '{query}': {len(m)} clusters",
+        f"No clusters contain skill matching: {query}", args.limit)
+
+
+def cmd_path(args, report):
+    query = args.query
+    ql = query.lower()
+    find_and_display(
+        report["clusters"],
+        lambda c: any(ql in loc["path"].lower() for loc in c["locations"]),
+        lambda m: f"Path matching '{query}': {len(m)} clusters",
+        f"No clusters contain path matching: {query}", args.limit)
+
+
+def cmd_grep(args, report):
+    """Find clusters where any member file content matches a regex."""
+    try:
+        rx = re.compile(args.pattern, re.IGNORECASE)
+    except re.error as e:
+        err(f"Bad regex: {e}")
+        sys.exit(1)
+
+    base_dir = args.dir
+    if not os.path.isdir(base_dir):
+        err(f"Error: --dir is not a directory: {base_dir}")
+        sys.exit(1)
+
+    base_resolved = Path(base_dir).resolve()
+
+    matches = []
+    checked = 0
+    skipped = 0
+    errors = 0
+    for c in report["clusters"]:
+        matched_locs = []
+        for loc in c["locations"]:
+            # Path traversal guard: ensure resolved path stays within base_dir
+            fpath = (base_resolved / loc["path"]).resolve()
+            try:
+                fpath.relative_to(base_resolved)
+            except ValueError:
+                continue
+            if not fpath.is_file():
+                skipped += 1
+                continue
+            if fpath.stat().st_size > 10 * 1024 * 1024:
+                skipped += 1
+                continue
+            checked += 1
+            try:
+                content = fpath.read_text(encoding="utf-8", errors="replace")
+                hits = list(rx.finditer(content))
+                if hits:
+                    # Store only the snippet, not full file content
+                    hit = hits[0]
+                    start = max(0, hit.start() - 40)
+                    end = min(len(content), hit.end() + 40)
+                    snippet = content[start:end].replace("\n", " ")
+                    matched_locs.append((loc["path"], snippet))
+            except OSError as e:
+                err(f"  warning: {fpath}: {e}")
+                errors += 1
+                continue
+        if matched_locs:
+            matches.append((c, matched_locs))
+
+    if not matches:
+        msg = f"No cluster members match: /{args.pattern}/  ({checked} files checked)"
+        if skipped:
+            msg += f"  ({skipped} files not found)"
+        print(msg)
+        if errors:
+            err(f"  {errors} files could not be read")
+        return
+
+    total_files = sum(len(locs) for _, locs in matches)
+    print(f"/{args.pattern}/ matched {total_files} files "
+          f"in {len(matches)} clusters  ({checked} checked)")
+    if skipped:
+        err(f"  {skipped} files not found under {base_dir}")
+    if errors:
+        err(f"  {errors} files could not be read")
+    print()
+    for c, matched_locs in sorted(
+            matches, key=lambda x: x[0]["size"], reverse=True)[:args.limit]:
+        cid = c.get("cluster_id", "?")
+        print(f"  Cluster {cid}: {c['size']} files, "
+              f"{c['avg_similarity']*100:.1f}% sim, type={c['type']}")
+        for path, snippet in matched_locs:
+            print(f"    MATCH {path}")
+            print(f"          ...{snippet}...")
+        matched_paths = {loc[0] for loc in matched_locs}
+        others = [loc["path"] for loc in c["locations"]
+                  if loc["path"] not in matched_paths]
+        if others:
+            print(f"    + {len(others)} other files in cluster")
+        print()
+
+
+def cmd_summary(args, report):
+    """Print a summary of the similarity report."""
+    meta = report.get("metadata", {})
+    summary = report.get("summary", {})
+    clusters = report.get("clusters", [])
+
+    print(f"Report: {args.report}")
+    if meta:
+        print(f"  Generated: {meta.get('generated_at', 'unknown')}")
+        print(f"  Threshold: {meta.get('similarity_threshold', 'unknown')}")
+        print(f"  Confidence: {meta.get('confidence', 'unknown')}")
+    print()
+    print(f"Files scanned: {summary.get('total_files_scanned', len(report.get('file_index', [])))}")
+    print(f"Files in clusters: {summary.get('files_in_clusters', '?')}")
+    print(f"Unique clusters: {summary.get('unique_clusters', len(clusters))}")
+    print()
+
+    by_type = summary.get("by_type", {})
+    if by_type:
+        print("By type:")
+        for typ, info in sorted(by_type.items()):
+            print(f"  {typ}: {info.get('clusters', '?')} clusters, "
+                  f"{info.get('files', '?')} files")
+    print()
+
+    author_counts = {}
+    for c in clusters:
+        for loc in c["locations"]:
+            author = extract_author(loc["path"])
+            author_counts[author] = author_counts.get(author, 0) + 1
+    if author_counts:
+        print("Top authors by cluster membership:")
+        for author, count in sorted(author_counts.items(), key=lambda x: -x[1])[:10]:
+            print(f"  {author}: {count} files")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Query similarity clusters from a librarian scan"
+    )
+    parser.add_argument("--report", default=str(DEFAULT_REPORT),
+                        help="Path to similarity_report.json")
+    parser.add_argument("--limit", type=int, default=20,
+                        help="Max clusters to display (default: 20)")
+
+    subparsers = parser.add_subparsers(dest="command", help="Commands")
+
+    p = subparsers.add_parser("author", help="Find clusters by author name")
+    p.add_argument("query", help="Author name to search for")
+
+    p = subparsers.add_parser("skill", help="Find clusters by skill name")
+    p.add_argument("query", help="Skill name to search for")
+
+    p = subparsers.add_parser("path", help="Find clusters by path fragment")
+    p.add_argument("query", help="Path fragment to search for")
+
+    p = subparsers.add_parser("grep", help="Find clusters by file content regex")
+    p.add_argument("pattern", help="Regex pattern to search for")
+    p.add_argument("--dir", required=True,
+                   help="Base directory containing the scanned files")
+
+    subparsers.add_parser("summary", help="Print report summary and statistics")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+
+    if not os.path.isfile(args.report):
+        err(f"Report not found: {args.report}")
+        err("Run 'librarian scan' first to generate the similarity index.")
+        sys.exit(1)
+
+    report = load_report(args.report)
+
+    if "clusters" not in report or not isinstance(report["clusters"], list):
+        err(f"Error: {args.report} does not contain a valid similarity report.")
+        err("Expected a 'clusters' array. Re-run 'librarian scan' to regenerate.")
+        sys.exit(1)
+
+    commands = {
+        "author": cmd_author,
+        "skill": cmd_skill,
+        "path": cmd_path,
+        "grep": cmd_grep,
+        "summary": cmd_summary,
+    }
+    commands[args.command](args, report)
+
+
+if __name__ == "__main__":
+    main()
