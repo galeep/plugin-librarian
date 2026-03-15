@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "plugin-librarian",
+  "description": "Navigate the Claude Code plugin ecosystem with awareness before install",
+  "owner": {
+    "name": "Gale Fagan",
+    "email": "gep-plugin@home.fagan.io"
+  },
+  "plugins": [
+    {
+      "name": "librarian",
+      "description": "Navigate the Claude Code plugin ecosystem with awareness before install",
+      "version": "0.1.0",
+      "author": {
+        "name": "Gale Fagan",
+        "email": "gep-plugin@home.fagan.io"
+      },
+      "source": "./"
+    }
+  ]
+}
