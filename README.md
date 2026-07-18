@@ -1,6 +1,6 @@
 # Plugin Librarian
 
-A similarity-aware index for the Claude Code plugin ecosystem. Scans all installed marketplaces, computes MinHash signatures for every skill and agent file, and answers questions about overlap, duplication, and coverage before you install anything.
+A similarity-aware index for Agent Skills ecosystems (Claude Code, OpenClaw/ClawHub, and other platforms using the format). Scans all installed marketplaces, computes MinHash signatures for every skill and agent file, and answers questions about overlap, duplication, and coverage before you install anything.
 
 ## Installation
 
