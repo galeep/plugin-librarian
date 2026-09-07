@@ -1,0 +1,227 @@
+{
+  "tally": {
+    "ok": 31634
+  },
+  "universe": 31634,
+  "per_seed": {
+    "1": {
+      "clusters": 2622,
+      "memberships": 7147,
+      "distinct": 7061
+    },
+    "42": {
+      "clusters": 2562,
+      "memberships": 6998,
+      "distinct": 6940
+    },
+    "123": {
+      "clusters": 2558,
+      "memberships": 6991,
+      "distinct": 6935
+    },
+    "456": {
+      "clusters": 2604,
+      "memberships": 7103,
+      "distinct": 7035
+    },
+    "789": {
+      "clusters": 2592,
+      "memberships": 7052,
+      "distinct": 6987
+    }
+  },
+  "seed_rows": [
+    {
+      "pair": "1 vs 42",
+      "n_inter": 6806,
+      "n_union": 7195,
+      "n_corpus": 31634,
+      "ari_inter": 0.9697321049914541,
+      "ari_union": 0.9552009109443571,
+      "ari_corpus": 0.9552215683291937
+    },
+    {
+      "pair": "1 vs 123",
+      "n_inter": 6776,
+      "n_union": 7220,
+      "n_corpus": 31634,
+      "ari_inter": 0.9699173102014469,
+      "ari_union": 0.95367391730253,
+      "ari_corpus": 0.9536952056779855
+    },
+    {
+      "pair": "1 vs 456",
+      "n_inter": 6836,
+      "n_union": 7260,
+      "n_corpus": 31634,
+      "ari_inter": 0.9589023332918691,
+      "ari_union": 0.9445252103050864,
+      "ari_corpus": 0.9445508764121242
+    },
+    {
+      "pair": "1 vs 789",
+      "n_inter": 6772,
+      "n_union": 7276,
+      "n_corpus": 31634,
+      "ari_inter": 0.9626857516502497,
+      "ari_union": 0.9415921855236566,
+      "ari_corpus": 0.941617992514454
+    },
+    {
+      "pair": "42 vs 123",
+      "n_inter": 6729,
+      "n_union": 7146,
+      "n_corpus": 31634,
+      "ari_inter": 0.969400401724474,
+      "ari_union": 0.9532109250023795,
+      "ari_corpus": 0.9532329607852403
+    },
+    {
+      "pair": "42 vs 456",
+      "n_inter": 6781,
+      "n_union": 7194,
+      "n_corpus": 31634,
+      "ari_inter": 0.9663088084350963,
+      "ari_union": 0.9523092219142818,
+      "ari_corpus": 0.9523317810825691
+    },
+    {
+      "pair": "42 vs 789",
+      "n_inter": 6746,
+      "n_union": 7181,
+      "n_corpus": 31634,
+      "ari_inter": 0.9690250969162287,
+      "ari_union": 0.9514925892327443,
+      "ari_corpus": 0.9515146857259431
+    },
+    {
+      "pair": "123 vs 456",
+      "n_inter": 6768,
+      "n_union": 7202,
+      "n_corpus": 31634,
+      "ari_inter": 0.9667161398674311,
+      "ari_union": 0.950600218830442,
+      "ari_corpus": 0.9506236248483693
+    },
+    {
+      "pair": "123 vs 789",
+      "n_inter": 6731,
+      "n_union": 7191,
+      "n_corpus": 31634,
+      "ari_inter": 0.9592321872096012,
+      "ari_union": 0.9390137037700742,
+      "ari_corpus": 0.9390415095036103
+    },
+    {
+      "pair": "456 vs 789",
+      "n_inter": 6767,
+      "n_union": 7255,
+      "n_corpus": 31634,
+      "ari_inter": 0.949112658309572,
+      "ari_union": 0.9317387414338543,
+      "ari_corpus": 0.9317698469195751
+    }
+  ],
+  "order_rows": [
+    {
+      "shuffle": 0,
+      "seed": 1000,
+      "clusters": 2616,
+      "n_inter": 7061,
+      "n_union": 7061,
+      "ari_inter": 0.9864452004206621,
+      "ari_union": 0.9864452004206621,
+      "ari_corpus": 0.9864516844489225
+    },
+    {
+      "shuffle": 1,
+      "seed": 1001,
+      "clusters": 2617,
+      "n_inter": 7061,
+      "n_union": 7061,
+      "ari_inter": 0.9858904332574911,
+      "ari_union": 0.9858904332574911,
+      "ari_corpus": 0.9858971842758752
+    },
+    {
+      "shuffle": 2,
+      "seed": 1002,
+      "clusters": 2618,
+      "n_inter": 7061,
+      "n_union": 7061,
+      "ari_inter": 0.9905996109564006,
+      "ari_union": 0.9905996109564006,
+      "ari_corpus": 0.9906041116340999
+    },
+    {
+      "shuffle": 3,
+      "seed": 1003,
+      "clusters": 2616,
+      "n_inter": 7061,
+      "n_union": 7061,
+      "ari_inter": 0.9909182682121158,
+      "ari_union": 0.9909182682121158,
+      "ari_corpus": 0.9909226163244694
+    },
+    {
+      "shuffle": 4,
+      "seed": 1004,
+      "clusters": 2612,
+      "n_inter": 7061,
+      "n_union": 7061,
+      "ari_inter": 0.9820097231433155,
+      "ari_union": 0.9820097231433155,
+      "ari_corpus": 0.9820183620522408
+    },
+    {
+      "shuffle": 5,
+      "seed": 1005,
+      "clusters": 2616,
+      "n_inter": 7061,
+      "n_union": 7061,
+      "ari_inter": 0.992078129176148,
+      "ari_union": 0.992078129176148,
+      "ari_corpus": 0.9920819242353665
+    },
+    {
+      "shuffle": 6,
+      "seed": 1006,
+      "clusters": 2616,
+      "n_inter": 7061,
+      "n_union": 7061,
+      "ari_inter": 0.9864931365286675,
+      "ari_union": 0.9864931365286675,
+      "ari_corpus": 0.9864996014866072
+    },
+    {
+      "shuffle": 7,
+      "seed": 1007,
+      "clusters": 2614,
+      "n_inter": 7061,
+      "n_union": 7061,
+      "ari_inter": 0.9843198569464358,
+      "ari_union": 0.9843198569464358,
+      "ari_corpus": 0.98432737077698
+    },
+    {
+      "shuffle": 8,
+      "seed": 1008,
+      "clusters": 2618,
+      "n_inter": 7061,
+      "n_union": 7061,
+      "ari_inter": 0.9849270041406174,
+      "ari_union": 0.9849270041406174,
+      "ari_corpus": 0.9849342318946197
+    },
+    {
+      "shuffle": 9,
+      "seed": 1009,
+      "clusters": 2617,
+      "n_inter": 7061,
+      "n_union": 7061,
+      "ari_inter": 0.9843422672455089,
+      "ari_union": 0.9843422672455089,
+      "ari_corpus": 0.9843497810305729
+    }
+  ]
+}
