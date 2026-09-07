@@ -1,24 +1,27 @@
 """Shingle size ablation: 2-gram, 3-gram and 4-gram word shingles.
 
-Runs MinHash/LSH clustering at the 90% threshold with each shingle size and scores
-precision and recall against the IOC account list, reproducing Table 5 of Section 5.2
-(\\label{tab:shingle-ablation}). Shingling, MinHash parameters, LSH threshold, greedy
-clustering and the precision and recall definitions are those the paper describes.
+Runs MinHash/LSH clustering at the 90% Jaccard threshold with each shingle size and
+scores precision and recall against the IOC account list. It reproduces Table 5
+(`tab:shingle-ablation`, "Shingle size ablation at 90% Jaccard threshold.") and
+supports the sentence in Section 5.2 that introduces it: "We repeated the MinHash
+analysis with 2-gram and 4-gram word shingles (Table 5)." Shingling, MinHash
+parameters, LSH threshold, greedy clustering and the precision and recall
+definitions are those Section 3.3 describes.
 
-Inputs. LIBRARIAN_CORPUS (required) names the pinned March corpus; see
+Inputs. LIBRARIAN_CORPUS (required) names the corpus snapshot recorded in
 paper/supplementary/repository-commits.md. The file list is the `file_index` of
 `scan_20260314_threshold90_skillonly.json`, beside this script, resolved through
 `order_permutation.load_files`. Account ground truth is read from `paper/iocs.json`
-and asserted at startup to equal MARCH_MALICIOUS_AUTHORS, the eleven accounts the
-published run used, so an edit to iocs.json cannot silently redefine the published
-precision.
+and asserted at startup to equal MARCH_MALICIOUS_AUTHORS, the eleven accounts
+Table 5 was computed with, so an edit to iocs.json cannot silently redefine the
+published precision.
 
 Output: `shingle-ablation-<UTC date>.md` beside this script, or the full path in
 SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's file. The
 report compares every cell against Table 5 as printed.
 
-Run:
-  LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS python paper/sources/scans/shingle_ablation.py
+Run, with LIBRARIAN_CORPUS set:
+  python paper/sources/scans/shingle_ablation.py
 """
 
 import datetime
@@ -45,18 +48,18 @@ CORPUS = Path(require_corpus())
 REPO = Path(__file__).resolve().parents[3]
 SCAN = Path(__file__).with_name("scan_20260314_threshold90_skillonly.json")
 IOCS = REPO / "paper" / "iocs.json"
-# DESIGN RATIONALE (from order_permutation.py): a hardcoded dated name meant any
-# rerun clobbered the tracked baseline. The default carries today's UTC date, so it
-# cannot clobber a tracked baseline from another day; a SAME-DAY rerun still
-# overwrites the day's file unless SCAN_RESULTS_OUT (a full path) is set.
+# DESIGN RATIONALE (shared with order_permutation.py): the default output name
+# carries today's UTC date, so a rerun cannot overwrite a tracked results file from
+# another day. A same-day rerun overwrites the day's file unless SCAN_RESULTS_OUT
+# (a full path) is set.
 _DEFAULT_OUT_NAME = "shingle-ablation-{}.md".format(
     datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d"))
 OUT = Path(os.environ["SCAN_RESULTS_OUT"]) if os.environ.get("SCAN_RESULTS_OUT") \
     else Path(__file__).with_name(_DEFAULT_OUT_NAME)
 
-# The eleven accounts the March run treated as malicious, hardcoded then and read
-# from iocs.json now. The two sets are identical, which is asserted at startup so
-# that an edit to iocs.json cannot silently redefine the published precision.
+# The eleven ClawHub accounts that the precision columns of Table 5 count as
+# malicious. `clawhub_authors` in iocs.json is asserted equal to this set at
+# startup, so an edit to iocs.json cannot silently redefine the published precision.
 MARCH_MALICIOUS_AUTHORS = frozenset({
     "hightower6eu", "sakaen736jih", "thiagoruss0", "zaycv",
     "jordanprater", "stveenli", "anisafifi", "timclawbot",
@@ -64,7 +67,7 @@ MARCH_MALICIOUS_AUTHORS = frozenset({
 })
 RECALL_AUTHOR = "hightower6eu"
 
-# Table 5 of paper/main-acm.tex as published, for the comparison table:
+# Table 5 of the paper as printed, for the comparison table:
 # size -> (clusters, memberships, recall_found, recall_total, p20_tp, p20_n,
 #          p10_tp, p10_n).
 PAPER_TABLE5 = {
@@ -108,21 +111,20 @@ def load_iocs_authors():
     """Malicious account list for precision, read from paper/iocs.json.
 
     The rule is the keys of `clawhub_authors`, the accounts this study confirmed
-    by payload inspection. It is NOT the rule
-    file_level_precision.py uses, so nothing is imported from that script:
-    its `strict` set is Antiy CERT's 12 documented accounts and its `study` set
-    is the union of those with `clawhub_authors` (18 accounts), and its
-    `account_of` additionally requires marketplace == "clawhub-archive" and a
-    four-segment path. Substituting either would change the published Table 5
-    numbers, so this script keeps what it had.
+    by payload inspection. It is not the rule file_level_precision.py uses, so
+    nothing is imported from that script: its `strict` set is Antiy CERT's 12
+    documented accounts, its `study` set is the union of those with
+    `clawhub_authors` (18 accounts), and its `account_of` additionally requires
+    marketplace == "clawhub-archive" and a four-segment path. Substituting either
+    would change the Table 5 numbers, so this script applies its own rule.
     """
     iocs = json.loads(IOCS.read_text())
     authors = frozenset(iocs["clawhub_authors"])
     if authors != MARCH_MALICIOUS_AUTHORS:
         raise ValueError(
-            f"iocs.json clawhub_authors no longer matches the account list the March run used; "
+            f"iocs.json clawhub_authors does not match the account list Table 5 was computed with; "
             f"only in iocs.json: {sorted(authors - MARCH_MALICIOUS_AUTHORS)}, "
-            f"only in the March list: {sorted(MARCH_MALICIOUS_AUTHORS - authors)}")
+            f"only in MARCH_MALICIOUS_AUTHORS: {sorted(MARCH_MALICIOUS_AUTHORS - authors)}")
     return authors
 
 
@@ -220,14 +222,14 @@ def self_test() -> int:
     """Pin the shingle function to exact expected sets before any run.
 
     DESIGN RATIONALE: every number in Table 5 is a function of this one routine,
-    and a silent change to the normalisation (the punctuation class, the
+    and a silent change to the normalization (the punctuation class, the
     short-document fallback) would move all three rows at once while still
     producing a plausible-looking table. The expected sets are written out by
     hand rather than derived from the code. The last check pins the 3-gram case
     to librarian.core.tokenize, the production tokenizer that built the archived
-    March scan, since the 3-gram row is supposed to reproduce it exactly.
+    scan, since the 3-gram row is required to reproduce that scan exactly.
     """
-    text = "The Quick, brown fox!  jumps"          # normalises to "the quick brown fox jumps"
+    text = "The Quick, brown fox!  jumps"          # normalizes to "the quick brown fox jumps"
     expected = {
         2: {"the quick", "quick brown", "brown fox", "fox jumps"},
         3: {"the quick brown", "quick brown fox", "brown fox jumps"},
@@ -246,7 +248,7 @@ def self_test() -> int:
               file=sys.stderr)
         return 1
     if tokenize_with_size(text, 3) != tokenize(text):
-        print("self-test FAILED: the 3-gram case no longer agrees with librarian.core.tokenize, "
+        print("self-test FAILED: the 3-gram case does not agree with librarian.core.tokenize, "
               "so the 3-gram row cannot be the archived scan's configuration", file=sys.stderr)
         return 1
     return 0
@@ -261,9 +263,9 @@ def datasketch_version():
 
 
 def rerun_command():
-    env_corpus = os.environ.get("LIBRARIAN_CORPUS")
-    prefix = f"LIBRARIAN_CORPUS={tilde(env_corpus)} " if env_corpus else ""
-    return f"{prefix}python paper/sources/scans/{Path(__file__).name}"
+    """The run line as printed in the report. LIBRARIAN_CORPUS is named once, in
+    the sentence that introduces it, not repeated on the command."""
+    return f"python paper/sources/scans/{Path(__file__).name}"
 
 
 def environment_table(results):
@@ -402,19 +404,28 @@ def main() -> int:
 
     any3 = results[3]
     lines = ["# Shingle size ablation (90% Jaccard threshold, SKILL.md only)", "",
-             f"Reproduction of Table 5 of the paper (`tab:shingle-ablation`). Generated by "
-             f"`{Path(__file__).name}`; rerun with `{rerun_command()}` from the repository root.",
-             f"The corpus is chosen by the `LIBRARIAN_CORPUS` environment variable, which has "
-             f"no default; a run without it stops before computing anything.",
-             f"Output defaults to `shingle-ablation-<UTC date>.md`; set `SCAN_RESULTS_OUT` to a "
-             f"full path to write elsewhere.", "",
-             f"The original run read its file list from a local index file that no longer exists, "
-             f"and resolved paths against an unpinned checkout. The list now comes from the "
-             f"committed scan `{SCAN.name}` and paths "
-             f"resolve under `LIBRARIAN_CORPUS`; the shingling, MinHash parameters, clustering, "
-             f"and the precision and recall definitions are unchanged.", "",
+             f"This file reports MinHash/LSH clustering of the SKILL.md corpus at the 90% "
+             f"Jaccard threshold with 2-gram, 3-gram and 4-gram word shingles, with precision "
+             f"and recall for each size. It reproduces Table 5 of the paper "
+             f"(`tab:shingle-ablation`, \"Shingle size ablation at 90% Jaccard threshold.\") "
+             f"and supports the sentence in Section 5.2 that introduces the table: \"We "
+             f"repeated the MinHash analysis with 2-gram and 4-gram word shingles (Table 5).\" "
+             f"The paragraph continues: \"All three sizes found the same 351 hightower6eu "
+             f"files in clusters (99.7% of 352 in the corpus). Precision varies: 2-grams "
+             f"produce more topical false positives (P@>=10: 75.7% vs. 78.9%), while 4-grams "
+             f"fragment one campaign, dropping P@>=20 to 93.3%. The 3-gram default maximizes "
+             f"precision.\"", "",
+             f"Generated by `{Path(__file__).name}`. Run, with `LIBRARIAN_CORPUS` set, from the "
+             f"repository root: `{rerun_command()}`. `LIBRARIAN_CORPUS` names the corpus "
+             f"snapshot and has no default; a run without it stops before computing anything. "
+             f"Output defaults to `shingle-ablation-<UTC date>.md` beside the script; set "
+             f"`SCAN_RESULTS_OUT` to a full path to write elsewhere.", "",
+             f"The file list is the `file_index` of the committed scan `{SCAN.name}`, and paths "
+             f"resolve under `LIBRARIAN_CORPUS`. The shingling, MinHash parameters, LSH "
+             f"threshold, greedy clustering, and the precision and recall definitions are those "
+             f"Section 3.3 describes; only the shingle size varies between rows.", "",
              f"Files with signatures: {any3['n_files']} of {len(file_index)}. Skipped "
-             f"{any3['skipped']['missing']} no longer in the corpus, {any3['skipped']['short']} "
+             f"{any3['skipped']['missing']} not present in the corpus, {any3['skipped']['short']} "
              f"shorter than 100 characters, {any3['skipped']['empty']} that produced no shingles "
              f"(3-gram run; the other sizes are reported in the results table).", "",
              "## Provenance", ""]
@@ -426,21 +437,22 @@ def main() -> int:
               f"**Recall.** Denominator: every file with a signature whose ClawHub archive path "
               f"is `skills/{RECALL_AUTHOR}/...`, read off the path (second segment of a path "
               f"whose first segment is `skills`). Numerator: those of them in any cluster. "
-              f"This is a corpus-file count, not the 354 IOC slugs of Table 2; the paper's "
-              f"caption says the same.",
+              f"This is a corpus-file count, not the 354 IOC slugs of Table 2, as the caption "
+              f"of Table 5 states.",
               "",
               f"**Precision.** A cluster of at least the stated size counts as a true positive "
               f"if at least one of its files has a path-derived account in the "
               f"{len(malicious_authors)} accounts of `clawhub_authors` in `paper/iocs.json` "
-              f"({', '.join(sorted(malicious_authors))}). The rule is read from iocs.json rather "
-              f"than hardcoded, and the script exits before running if the two ever disagree.",
+              f"({', '.join(sorted(malicious_authors))}). The list is read from iocs.json and "
+              f"asserted equal to the eleven accounts built into the script, which exits before "
+              f"running if the two disagree.",
               "",
               "**Not file_level_precision.py's rule.** That script scores `strict` (Antiy CERT's "
               "12 documented accounts) and `study` (the union of those with `clawhub_authors`, "
               "18 accounts), and its `account_of` also requires the marketplace to be "
               "`clawhub-archive` and the path to have four segments. Neither set nor the gate "
-              "matches what Table 5 was computed with, so nothing is imported from it and this "
-              "script keeps its own rule.", "",
+              "is the rule Table 5 was computed with, so nothing is imported from it and this "
+              "script applies its own rule.", "",
               "## Results", "",
               "| Shingle | Clusters | Memberships | Recall | P@>=20 | P@>=15 | P@>=10 | P@>=5 | "
               "Files with signatures | Runtime |",
@@ -461,7 +473,7 @@ def main() -> int:
     rows, mismatches = comparison_rows(results)
     lines += ["", "## Comparison against Table 5 as published", "",
               "Percentages are shown for reading; the match column compares the underlying "
-              "integer counts, since two different counts can round to the same rate.", "",
+              "integer counts, since two different counts can print the same one-decimal rate.", "",
               "| Shingle | Cell | Paper Table 5 | This rerun | Match |",
               "|---|---|---:|---:|---|"]
     for size_label, label, pv, mv, ok in rows:

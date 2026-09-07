@@ -1,5 +1,16 @@
 # Reproduction Steps
 
+This file lists the commands that retrieve the corpus snapshot and rerun
+the published scan, and it records the tool commit the scan ran at. It
+supports Appendix C (Reproduction): "That repository is the artifact: it
+holds the tool, the commit table, the similarity matrix, the
+scaffold-cluster list, the results files behind the figures reported
+here, and the reproduction commands with the tool commit the published
+scan ran at." The closing paragraph supports the backup-filter sentence
+in Section 3.2 (Dataset Construction): "Before that test, the scanner
+had skipped any path containing backup (864 files, 780 of them one
+repository's backup directory)."
+
 The primary analysis ran on the ClawHub archive snapshot cloned on
 2026-03-13 at commit `16c991de` (full SHA
 `16c991dea171b9f4e785cb2a70dc1ae2ade83396`). The upstream
@@ -23,13 +34,12 @@ librarian scan --dir ./skills --threshold 0.9 --skill-only
 librarian stats
 ```
 
-The scan reported in the paper ran with the backup filter as this
-repository has it at commit `b55ceff`
+The published scan ran with the tool at commit `b55ceff`
 (`b55ceff1fde1ef0678a62067d7e0a6cdac852b3e`, the most recent commit to
-touch `librarian/`). Under that rule the scanner skips any path
-containing `backup` as a substring, which dropped 864 `SKILL.md` files on
-this corpus. A later fix, not released here, skips only a top-level
-`backup` or `backups` directory of the scan root; under it a rerun indexes
-84 more files than the published scan, and the remaining 780 stay skipped,
-all of them under one repository's `backups/` tree
-(`claude-code-plugins-plus/backups/`). No published count changes.
+touch `librarian/`), and that is the filter rule this repository ships.
+Under it the scanner skips any path containing `backup` as a substring,
+which dropped 864 `SKILL.md` files on this corpus: 780 of them under one
+repository's `backups/` tree (`claude-code-plugins-plus/backups/`) and
+the other 84 at paths elsewhere in the corpus that contain the
+substring. Every count in the paper was produced under this rule, so a
+rerun at this commit applies the same exclusions.

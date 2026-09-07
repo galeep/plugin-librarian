@@ -1,41 +1,49 @@
 #!/usr/bin/env python3
 """Sentence-embedding baseline for Section 5.2 and Figure 3 (all-MiniLM-L6-v2).
 
-Section 5.2 reports "Embeddings produced 3,626 clusters covering 9,462 files" (29.9%),
-99.7% recall, P@>=20 92.9% (13/14), P@>=10 62.8% (27/43), and 924 s wall time. This
-script recomputes every one of those figures.
+Section 5.2 (Comparison with Simple Baselines) reports: "Embeddings produced 3,626
+clusters covering 9,462 files (29.9%) with 99.7% recall. Precision fell between
+TF-IDF and MinHash: P@>=20 was 92.9% (13/14) and P@>=10 was 62.8% (27/43). Runtime
+was 924 s (805 s encoding, 119 s clustering), three times slower than MinHash."
+This script recomputes every one of those figures and writes them beside the
+published values.
 
-Method: 384-dimensional embeddings of the first 2,048 characters of each file, cosine
-similarity at 0.9, and the same greedy first-match clustering rule as the MinHash
-pipeline. Encoding stays in torch throughout and values cross to Python only via
-`.tolist()`, so the run does not depend on the torch/NumPy ABI pairing.
+Method, as Section 5.2 states it: every file that decodes as UTF-8 (31,626 of
+31,634), 384-dimensional embeddings of the first 2,048 characters of each file,
+cosine similarity at 0.9, and the same greedy first-match clustering rule as the
+MinHash pipeline (Section 3.3). Encoding stays in torch throughout and values cross
+to Python only via `.tolist()`, so the result does not depend on the torch/NumPy
+pairing of the interpreter.
 
-Inputs. LIBRARIAN_CORPUS (required) names the pinned March corpus; see
-paper/supplementary/repository-commits.md. The file list is the archived scan's
-`file_index`, resolved as `$LIBRARIAN_CORPUS/<marketplace>/<path>`. Ground-truth accounts come
-from `paper/iocs.json` (`clawhub_authors`). Set HF_HUB_OFFLINE=1 so the model bytes
-are the ones already cached; the run records the cached snapshot hash.
+Inputs. LIBRARIAN_CORPUS (required) names the pinned corpus snapshot; the commit of
+every marketplace is in paper/supplementary/repository-commits.md. The file list is
+the archived scan's `file_index` (scan_20260314_threshold90_skillonly.json, beside
+this script), resolved as `$LIBRARIAN_CORPUS/<marketplace>/<path>`. Ground-truth
+accounts come from `paper/iocs.json` (`clawhub_authors`). Set HF_HUB_OFFLINE=1 so
+the model bytes are the ones already cached; the run records the cached snapshot
+hash.
 
 The MinHash comparison row is recomputed from the archived scan under the same
 precision and recall definitions, not quoted from a stored literal.
 
-Output: `embedding-comparison-<UTC date>.md` beside this script, or the full path in
+Output: `embedding-comparison-YYYYMMDD.md` (UTC date) beside this script, or the full path in
 SCAN_RESULTS_OUT. The Markdown template lives in `embedding_comparison_report.py`,
 which computes nothing. A second run on the same UTC day overwrites the day's file.
 
-Options: --decode strict|replace (default replace) chooses how non-UTF-8 corpus files
-are read; `strict` skips and lists them, `replace` substitutes U+FFFD and keeps every
-indexed file. See `load_corpus`.
+Options: --decode strict|replace (default replace) chooses how files that are not
+valid UTF-8 are read. `strict` skips and lists them, which is the population Section
+5.2 states; `replace` substitutes U+FFFD and keeps every indexed file. See
+`load_corpus`.
 
 Requires sentence-transformers and torch, which are not dependencies of the
-`librarian` package. Any interpreter with those installed and the model cached will do.
+`librarian` package. Any interpreter with those installed and the model cached will
+do.
 
-Run:
-  LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS HF_HUB_OFFLINE=1 python \
-    paper/sources/scans/embedding_comparison.py
+Run, with LIBRARIAN_CORPUS set:
+  HF_HUB_OFFLINE=1 python paper/sources/scans/embedding_comparison.py --decode strict
 
 Self-test runs first: a near-duplicate pair must score above the threshold and an
-unrelated pair below it, so a broken encode or a wrong normalisation fails the run
+unrelated pair below it, so a broken encode or a wrong normalization fails the run
 rather than producing a plausible cluster count.
 """
 
@@ -61,18 +69,18 @@ IOCS = HERE.parents[1] / "iocs.json"
 def require_corpus():
     """Corpus root from LIBRARIAN_CORPUS, or exit; there is no default.
 
-    DESIGN RATIONALE: a fallback to a checkout on the author's machine hands a
-    reproducer plausible numbers computed against the wrong tree. No default is
-    right, so there is none, and a missing or wrong value stops the run.
+    DESIGN RATIONALE: a default path would hand a reproducer plausible numbers
+    computed against the wrong tree. No default is right, so there is none, and a
+    missing or wrong value stops the run.
     """
     value = os.environ.get("LIBRARIAN_CORPUS")
     if not value:
-        sys.exit("LIBRARIAN_CORPUS is unset; set it to the pinned March snapshot "
+        sys.exit("LIBRARIAN_CORPUS is unset; set it to the pinned corpus snapshot "
                  "(see paper/supplementary/repository-commits.md) and rerun.")
     root = os.path.expanduser(value)
     if not os.path.isdir(root):
         sys.exit(f"LIBRARIAN_CORPUS={value} is not a directory; set it to the pinned "
-                 "March snapshot (see paper/supplementary/repository-commits.md) and rerun.")
+                 "corpus snapshot (see paper/supplementary/repository-commits.md) and rerun.")
     return root
 
 
@@ -88,12 +96,13 @@ OUT = Path(os.environ["SCAN_RESULTS_OUT"]) if os.environ.get("SCAN_RESULTS_OUT")
 MODEL_NAME = "all-MiniLM-L6-v2"
 THRESHOLD = 0.9
 TRUNCATE_CHARS = 2048        # Section 5.2: "first 2,048 characters per file"
-MIN_CHARS = 100              # the March loader's skip rule, kept
-ENCODE_BATCH = 64            # the March loader's encode batch, kept
-SIM_BATCH = 1000             # the March clusterer's similarity batch, kept
+MIN_CHARS = 100              # files shorter than this are not encoded
+ENCODE_BATCH = 64            # documents per model.encode call
+SIM_BATCH = 1000             # similarity rows per matmul batch
 CLAWHUB = "clawhub-archive"
-# `--decode strict` reproduces the March loader's silent drop of files that are not
-# valid UTF-8; `replace` decodes them with U+FFFD. See load_corpus.
+# `--decode strict` skips files that are not valid UTF-8, giving the population
+# Section 5.2 states ("every file that decodes as UTF-8 (31,626 of 31,634)");
+# `replace` decodes them with U+FFFD. See load_corpus.
 DECODE_MODES = ("replace", "strict")
 DEFAULT_DECODE = "replace"
 
@@ -104,16 +113,16 @@ PAPER = {
     "p10_mal": 27, "p10_n": 43, "p10": 62.8,
     "runtime": 924, "encode_s": 805, "cluster_s": 119,
 }
-# Observed outcome of each decode mode, one full run per mode on the pinned March
-# corpus, 2026-09-07: (documents encoded, clusters, files in clusters). Recorded so a
-# results file can state what the mode it did not run would have given.
+# Observed outcome of each decode mode, one full run per mode on the pinned corpus
+# snapshot, 2026-09-07: (documents encoded, clusters, files in clusters). Recorded so
+# a results file can state what the mode it did not run gives.
 #
 # DESIGN RATIONALE: these are literals, and a literal printed beside a live run's own
-# counts is exactly the shape of a number that goes wrong quietly. So every run now
+# counts is exactly the shape of a number that goes wrong quietly. So every run
 # cross-checks the row for the mode it actually executed against what it just measured
 # (see main); only the OTHER mode's row is unverified, and the results file labels it as
 # recorded from a prior run rather than as this run's output. Update these values only
-# from a run whose cross-check you have read.
+# from a run whose cross-check has been read.
 DECODE_OBSERVED = {"strict": (31626, 3626, 9462), "replace": (31634, 3627, 9466)}
 
 # Published MinHash row Section 5.2 quotes alongside it, for the comparison block.
@@ -129,9 +138,10 @@ def get_author(marketplace, path):
     """Account owning a ClawHub archive file, or None.
 
     The marketplace must be `clawhub-archive` and the path must start `skills/`,
-    with at least three segments, in which case the second segment is the account. (Note this is one segment looser than
-    `file_level_precision.account_of`, which requires four; the looser rule is the
-    one that produced the published embedding figures, so it is kept.)
+    with at least three segments, in which case the second segment is the account.
+    This is one segment looser than `file_level_precision.account_of`, which
+    requires four; the looser rule is the one behind the published embedding
+    figures, so it is kept.
     """
     parts = path.split("/")
     if marketplace == CLAWHUB and parts[0] == "skills" and len(parts) >= 3:
@@ -164,17 +174,16 @@ def load_corpus(entries, root, decode=DEFAULT_DECODE):
     Only `$LIBRARIAN_CORPUS/<marketplace>/<path>` is a real corpus path. A bare
     `$LIBRARIAN_CORPUS/<path>` fallback can resolve a different marketplace's file (14
     `curated` entries have paths beginning `hashicorp-agent-skills/`, itself a
-    top-level marketplace directory), so a miss stays a miss. The `< 100
-    characters` skip is the March loader's rule, kept.
+    top-level marketplace directory), so a miss stays a miss. Files under
+    MIN_CHARS characters are skipped.
 
     DESIGN RATIONALE for `decode`: eight indexed files are not valid UTF-8, and
-    whether they enter the corpus is what separates the published document count
-    from the full index. `strict` drops them, which is the population behind the
-    paper's Section 5.2 figures, and records which files it dropped;
+    whether they enter the corpus is what separates the 31,626 documents Section 5.2
+    states from the 31,634 in the full index. `strict` drops them, which is the
+    population behind the published figures, and records which files it dropped;
     `replace` (the default) decodes everything with U+FFFD substitutions, which is
-    what `order_permutation.signatures` does and what a reader would assume from
-    "all 31,634 files". The two are not interchangeable, so the mode is recorded in
-    the results file rather than left implicit.
+    what `order_permutation.signatures` does. The two are not interchangeable, so the
+    mode is recorded in the results file rather than left implicit.
     """
     texts, metadata, undecodable = [], [], []
     skipped = {"missing": 0, "unreadable": 0, "undecodable": 0, "short": 0}
@@ -203,13 +212,12 @@ def load_corpus(entries, root, decode=DEFAULT_DECODE):
 # --------------------------------------------------------------------------
 
 def encode(texts, model):
-    """L2-normalised (n, 384) float32 torch tensor for the truncated texts.
+    """L2-normalized (n, 384) float32 torch tensor for the truncated texts.
 
-    DESIGN RATIONALE: everything here stays in torch. torch 2.2.2 in this
-    interpreter was compiled against NumPy 1.x and cannot hand a tensor to NumPy
-    (`Tensor.numpy()` raises `RuntimeError: Numpy is not available`), so
-    `convert_to_numpy` must stay off and no array ever crosses the boundary.
-    Normalising once here makes the cosine similarity a plain matmul.
+    DESIGN RATIONALE: everything here stays in torch. `convert_to_numpy` is off and
+    no array crosses the torch/NumPy boundary, so the run does not depend on the two
+    libraries having been built against each other. Normalizing once here makes the
+    cosine similarity a plain matmul.
     """
     import torch
 
@@ -226,7 +234,7 @@ def encode(texts, model):
 
 
 def _greedy_reference(sim_rows, n, threshold):
-    """Literal transcription of the March greedy loop, over a full (n, n) matrix.
+    """Reference greedy first-match loop over a full (n, n) matrix, as a plain double loop.
 
     Kept only so the self-test can prove the batched implementation below agrees
     with it. It is O(n^2) in Python and is never run on the corpus.
@@ -248,24 +256,22 @@ def _greedy_reference(sim_rows, n, threshold):
 
 
 def greedy_cluster(sim_rows_for, n, threshold, batch_size=SIM_BATCH, progress=False):
-    """The March greedy first-match clustering, driven by batched similarity rows.
+    """Greedy first-match clustering (Section 3.3), driven by batched similarity rows.
 
     `sim_rows_for(start, end)` returns the (end - start, n) similarity rows for
-    that batch. The rule is unchanged: walk files in index order; skip one already
-    assigned; take every other still-unassigned file at or above the threshold; if
-    there is at least one, emit the cluster and mark all of it assigned. A file
-    matching nothing is left unclustered, and a cluster is never revisited.
+    that batch. The rule: walk files in index order; skip one already assigned;
+    take every other still-unassigned file at or above the threshold; if there is
+    at least one, emit the cluster and mark all of it assigned. A file matching
+    nothing is left unclustered, and a cluster is never revisited.
 
-    DESIGN RATIONALE: the only change from the March code is how the matching
-    indices are found. It scanned `for idx in range(n)` in Python for every
-    unassigned row, ~7e8 scalar reads here and far slower under torch scalar
-    indexing than it was under NumPy. Thresholding the row in torch and walking
-    only the indices that clear it yields the identical set, because
-    `torch.nonzero` returns them in ascending order and the `idx != i` /
-    `idx not in assigned` filters are applied unchanged. `_greedy_reference`
-    pins that equivalence in the self-test rather than leaving it to inspection.
-    The loop lives here once, so the self-test exercises the same code the corpus
-    run does, with only the row source swapped.
+    DESIGN RATIONALE: scanning `for idx in range(n)` in Python for every unassigned
+    row costs about 7e8 scalar reads on this corpus, and torch scalar indexing is
+    slow. Thresholding the row in torch and walking only the indices that clear it
+    yields the identical set, because `torch.nonzero` returns them in ascending
+    order and the `idx != i` / `idx not in assigned` filters are applied unchanged.
+    `_greedy_reference` pins that equivalence in the self-test rather than leaving
+    it to inspection. The loop lives here once, so the self-test exercises the same
+    code the corpus run does, with only the row source swapped.
 
     Returns (clusters, similarity_seconds, cluster_seconds).
     """
@@ -297,7 +303,7 @@ def greedy_cluster(sim_rows_for, n, threshold, batch_size=SIM_BATCH, progress=Fa
 
 
 def cluster_embeddings(embeddings, threshold, batch_size=SIM_BATCH):
-    """Cluster L2-normalised embeddings: cosine similarity is then a plain matmul."""
+    """Cluster L2-normalized embeddings: cosine similarity is then a plain matmul."""
     n = embeddings.shape[0]
     return greedy_cluster(lambda s, e: embeddings[s:e] @ embeddings.T,
                           n, threshold, batch_size, progress=True)
@@ -384,45 +390,43 @@ SELFTEST_TEXTS = [
 
 
 def self_test(model) -> int:
-    """Check the encoder's cosine ordering and the greedy loop before the real run.
+    """Check the encoder's cosine ordering and the greedy loop before the corpus run.
 
     DESIGN RATIONALE: two things here fail silently rather than loudly. A model
-    that loaded but resolved to different weights, or a normalisation that was
+    that loaded but resolved to different weights, or a normalization that was
     skipped, still produces a plausible-looking similarity matrix; and the batched
-    greedy loop could quietly disagree with the March one at a batch boundary, or
-    at the threshold itself, and still emit a believable cluster count. So the
+    greedy loop could quietly disagree with the reference loop at a batch boundary,
+    or at the threshold itself, and still emit a believable cluster count. So the
     encoder is pinned by a known cosine ordering on three short sentences run
-    through `encode` itself, and the loop by equality with a literal transcription
-    of the original over a matrix carrying both a cross-batch match and a pair at
-    exactly the threshold.
+    through `encode` itself, and the loop by equality with `_greedy_reference` over
+    a matrix carrying both a cross-batch match and a pair at exactly the threshold.
 
-    Both arms are mutation-tested. Changing `greedy_cluster`'s `>=` to `>` passed an
-    earlier version of this test, because the matrix then had no value at 0.9; it now
-    fails. Normalising on the wrong axis in `encode` fails the first arm.
+    Both arms are mutation-tested. Changing `greedy_cluster`'s `>=` to `>` fails
+    because the matrix carries a value at exactly 0.9. Normalizing on the wrong axis
+    in `encode` fails the first arm.
 
-    One mutation cannot be caught, and the reason is worth recording rather than
-    papering over: DELETING the `/ norm` line from `encode` changes nothing at all.
-    `all-MiniLM-L6-v2` ships a `Normalize` module (`modules.json`: Transformer,
-    Pooling, Normalize), so `model.encode` already returns unit vectors and the
-    division is a no-op for this model. It is kept as a guard for a model that does
-    not normalise, and the check below tests the property that actually matters --
-    that whatever reaches the matmul is unit-norm -- rather than the line.
+    One mutation cannot be caught: deleting the `/ norm` line from `encode` changes
+    nothing at all. `all-MiniLM-L6-v2` ships a `Normalize` module (`modules.json`:
+    Transformer, Pooling, Normalize), so `model.encode` already returns unit vectors
+    and the division is a no-op for this model. It is kept as a guard for a model
+    that does not normalize, and the check below tests the property that matters,
+    that whatever reaches the matmul is unit-norm, rather than the line.
     """
     import torch
 
     # DESIGN RATIONALE: this MUST go through encode(), not a local copy of what
-    # encode does. An earlier version normalised inline here, so deleting the
-    # normalisation from encode() left the self-test passing while the corpus run
-    # went on to cluster unnormalised dot products. Routing the three sentences
-    # through the real function is what makes the self-similarity check below an
-    # actual test of the code that runs on the corpus.
+    # encode does. A self-test that normalized inline here would keep passing if
+    # the normalization were deleted from encode() while the corpus run went on to
+    # cluster unnormalized dot products. Routing the three sentences through the
+    # real function is what makes the self-similarity check below a test of the
+    # code that runs on the corpus.
     e = encode(SELFTEST_TEXTS, model)
     sim = (e @ e.T).tolist()
     dup, far_a, far_b = sim[0][1], sim[0][2], sim[1][2]
     for i in range(3):
         if abs(sim[i][i] - 1.0) > 1e-4:
             print(f"self-test FAILED: self-similarity {sim[i][i]} is not 1 "
-                  f"(embeddings are not normalised)", file=sys.stderr)
+                  f"(embeddings are not normalized)", file=sys.stderr)
             return 1
     if not dup >= THRESHOLD:
         print(f"self-test FAILED: near-duplicate pair scored {dup:.4f}, "
@@ -445,9 +449,9 @@ def self_test(model) -> int:
     # DESIGN RATIONALE for the 0.9 cell: the rule is `>= threshold`, and inclusivity
     # at exactly the threshold is the one place it can change silently and move a
     # cluster count. Without a boundary value in this matrix, flipping `>=` to `>`
-    # in greedy_cluster passed the whole self-test. float32(0.9) >= 0.9 is True in
-    # torch (the Python scalar is cast to the tensor's dtype) and > 0.9 is False, so
-    # the {5,6} cluster disappears under that mutation and the check fires.
+    # in greedy_cluster would pass the whole self-test. float32(0.9) >= 0.9 is True
+    # in torch (the Python scalar is cast to the tensor's dtype) and > 0.9 is False,
+    # so the {5,6} cluster disappears under that mutation and the check fires.
     m = [[1.0, 0.95, 0.10, 0.10, 0.92, 0.10, 0.10],
          [0.95, 1.0, 0.10, 0.10, 0.20, 0.10, 0.10],
          [0.10, 0.10, 1.0, 0.99, 0.10, 0.10, 0.10],
@@ -479,7 +483,7 @@ def self_test(model) -> int:
 
 
 def parse_args(argv=None):
-    """Just `--decode strict|replace`. argparse would be four lines longer here.
+    """Only `--decode strict|replace`; a hand-rolled loop is shorter than argparse here.
 
     DESIGN RATIONALE: the mode changes which documents are encoded, so a typo must
     stop the run rather than fall through to the default and produce a results file
@@ -556,7 +560,7 @@ def main(argv=None) -> int:
     # DESIGN RATIONALE: the results file prints DECODE_OBSERVED beside cmp_rows, which
     # is built from this run's real clusters. Without this comparison the two could
     # disagree on screen with nothing saying so. The verdict is rendered into the
-    # results table AND warned to stderr, and the run exits non-zero -- but the file is
+    # results table AND warned to stderr, and the run exits non-zero, but the file is
     # written first, so a failing run leaves its output on disk to be read. That is the
     # same order exact_hash_baseline.py and file_level_precision.py use, and it is the
     # reason this does not raise: raising would destroy the artifact needed to diagnose

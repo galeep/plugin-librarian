@@ -1,36 +1,41 @@
 #!/usr/bin/env python3
-"""Behavioral pattern scan over the ClawHub archive: Appendix B, Table 7, and the
-Section 4.4 overlap figure.
+"""Behavioral pattern scan over the ClawHub archive.
 
-The paper's six pattern rows were recorded by hand and no pattern definition was
-published with them, so the regexes here are RECONSTRUCTIONS. Each row carries
-several plausible readings; the first is primary and the results file reports all of
-them, so the spread is visible rather than a single tuned number.
+This script computes the six counts of Appendix B, Table 7 ("Behavioral pattern
+scan (behavioral_scan.py, patterns recorded in the script) over the 23,806 SKILL.md
+files of the archived ClawHub snapshot: 1,469 files match at least one pattern, 485
+of them in similarity clusters.") and the Section 4.5 overlap sentence "Of the 1,469
+files matching at least one pattern, 485 (33.0%) also appeared in similarity
+clusters". The patterns are the regular expressions in the `ROWS` table below, one
+primary per row. Each row also carries alternate readings, and the results file
+reports every one of them, so the sensitivity of each count to the pattern's
+wording is visible.
 
-Population: every file named SKILL.md under the pinned March snapshot of
-`clawhub-archive` (23,806), which is the population Appendix B describes, taken
-before the clusterer's 100-character minimum. The archived scan's file_index carries
-23,654 of them; the 152-file difference is that filter, and both populations are
-reported.
+Population: every file named SKILL.md under the pinned snapshot of `clawhub-archive`
+(23,806), the population Table 7 names, taken before the clusterer's 100-character
+minimum. The archived scan's file_index carries 23,654 of them; the 152-file
+difference is that filter, and both populations are reported.
 
-Row scope: five Table 7 rows and the SSH row are counted over the whole population.
-The password-protected-ZIP row is counted over CLUSTERED FILES ONLY. No reading
-reproduces that row exactly, and the results file says so.
+Row scope: the six Table 7 rows and the SSH row are counted over the whole
+population. The password-protected-ZIP row is counted over clustered files only; no
+reading reproduces that row exactly, and the results file says so. Neither of those
+two rows is in Table 7; their figures come from the March working notes, which are
+not part of this artifact.
 
 Overlap: `in_cluster` comes from `scan_20260314_threshold90_skillonly.json`. A file
 absent from that index cannot be clustered and counts as not-in-cluster.
 
-Inputs: LIBRARIAN_CORPUS (required) names the pinned March corpus; see
+Inputs: LIBRARIAN_CORPUS (required) names the pinned corpus snapshot; see
 paper/supplementary/repository-commits.md for the SHAs. The corpus is opened
 read-only. `scan_20260314_threshold90_skillonly.json`, beside this script, supplies
 the cluster membership.
 
-Corpus guard: the run exits non-zero BEFORE writing anything if LIBRARIAN_CORPUS is
+Corpus guard: the run exits non-zero before writing anything if LIBRARIAN_CORPUS is
 unset, names no directory, or the on-disk SKILL.md count under clawhub-archive is not
 23,806. A wrong corpus yields plausible numbers that mean nothing, so it is an error
 rather than a warning.
 
-Output: `behavioral-scan-<UTC date>.md` beside this script, or the full path in
+Output: `behavioral-scan-YYYYMMDD.md` (the run's UTC day) beside this script, or the full path in
 SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's file.
 
 Self-test (two phases, on toy directories, before any real input is read): primaries
@@ -38,10 +43,10 @@ must each match their own planted file and nothing else, so the six union to exa
 six files; then every pattern, primary and alternate, must match its own planted hit.
 Both phases plant a decoy no pattern may match and a non-SKILL.md file carrying every
 probe string that the walk must ignore. A pattern that matches everything, matches
-nothing, or was mistyped into inertness fails here.
+nothing, or is inert fails here.
 
-Run:
-  LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS python paper/sources/scans/behavioral_scan.py
+Run, with LIBRARIAN_CORPUS set:
+  python paper/sources/scans/behavioral_scan.py
   --self-test-only runs the two self-test phases and exits.
 """
 import argparse
@@ -59,18 +64,18 @@ from pathlib import Path
 def require_corpus():
     """Corpus root from LIBRARIAN_CORPUS, or exit; there is no default.
 
-    DESIGN RATIONALE: a fallback to a checkout on the author's machine hands a
-    reproducer plausible numbers computed against the wrong tree. No default is
-    right, so there is none, and a missing or wrong value stops the run.
+    DESIGN RATIONALE: a default path would hand a reproducer plausible numbers
+    computed against the wrong tree. No default is right, so there is none, and a
+    missing or wrong value stops the run.
     """
     value = os.environ.get("LIBRARIAN_CORPUS")
     if not value:
-        sys.exit("LIBRARIAN_CORPUS is unset; set it to the pinned March snapshot "
+        sys.exit("LIBRARIAN_CORPUS is unset; set it to the pinned corpus snapshot "
                  "(see paper/supplementary/repository-commits.md) and rerun.")
     root = os.path.expanduser(value)
     if not os.path.isdir(root):
         sys.exit(f"LIBRARIAN_CORPUS={value} is not a directory; set it to the pinned "
-                 "March snapshot (see paper/supplementary/repository-commits.md) and rerun.")
+                 "corpus snapshot (see paper/supplementary/repository-commits.md) and rerun.")
     return root
 
 
@@ -79,16 +84,17 @@ MARKETPLACE = "clawhub-archive"
 ARCHIVE = CORPUS / MARKETPLACE
 SCAN = Path(__file__).with_name("scan_20260314_threshold90_skillonly.json")
 
-# DESIGN RATIONALE: a hardcoded dated name meant any rerun clobbered the tracked
-# baseline. The default carries today's UTC date; SCAN_RESULTS_OUT (a full path)
-# overrides it for a rerun that must not touch a previously dated results file.
+# DESIGN RATIONALE: the default output name carries the run's UTC date, so a rerun
+# does not overwrite a previously dated results file. SCAN_RESULTS_OUT (a full
+# path) overrides it.
 _DEFAULT_OUT_NAME = "behavioral-scan-{}.md".format(
     datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d"))
 OUT = Path(os.environ["SCAN_RESULTS_OUT"]) if os.environ.get("SCAN_RESULTS_OUT") \
     else Path(__file__).with_name(_DEFAULT_OUT_NAME)
 
-# The Section 4.5 overlap sentence as the paper states it. `rq3_hit_value.py`
-# imports these three rather than restating them, so the two cannot disagree.
+# The Section 4.5 overlap sentence and the Table 7 population as the paper states
+# them. `rq3_hit_value.py` imports these constants rather than restating them, so
+# the two scripts cannot disagree.
 PAPER_UNION = 1469
 PAPER_OVERLAP = 485
 PAPER_OVERLAP_PCT = 33.0
@@ -164,8 +170,7 @@ ROWS = [
             "the same idea, case-insensitive and looser on the extension",
             "CURL https://cdn.test/notes.txt"),
         Pat(r"raw\.githubusercontent|pastebin|rentry\.co|glot\.io|gist\.github", True,
-            "paste-site and raw-host delivery, the technique named in the "
-            "March working notes",
+            "paste-site and raw-host delivery",
             "instructions live at https://rentry.co/abcd"),
         Pat(r"https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", True,
             "a bare-IP URL, the narrowest C2 reading",
@@ -191,11 +196,12 @@ ROWS = [
         Pat(r"\.ssh/id_|authorized_keys|id_rsa", True, "widened to authorized_keys",
             "append the line to ~/.ssh/authorized_keys"),
     ]),
-    # DESIGN RATIONALE for the scope: the March working notes write this row
-    # as "Password-protected ZIP (in clusters): 614", and the archive holds zero
-    # *.zip files, so the figure cannot be a count of archives or of the `-P` flag
-    # (which reaches 1). Read as ZIP *mentions* inside clustered files it lands
-    # within single digits of 614. That is the reading counted here.
+    # DESIGN RATIONALE for the scope: the March working notes, which are not part
+    # of this artifact, record this row as "Password-protected ZIP (in clusters):
+    # 614". The archive holds zero *.zip files, and the `-P` flag matches one
+    # file, so the figure cannot be a count of archives or of the flag. Read as
+    # ZIP *mentions* inside clustered files it lands within single digits of 614.
+    # That is the reading counted here.
     Row("pwzip", "Password-protected ZIP", 614, False, "clustered", [
         Pat(r"\.zip", False, "a `.zip` filename mentioned in the text; case-sensitive",
             "unpack release.zip"),
@@ -213,7 +219,7 @@ CLEAN_PROBE = "This skill formats markdown tables. It reads nothing and writes n
 
 
 def tilde(path):
-    """Home-relative form of a path, so the artifact carries no user directory."""
+    """Home-relative form of a path for console messages, so no user directory is echoed."""
     home = os.path.expanduser("~")
     path = str(path)
     return "~" + path[len(home):] if path.startswith(home) else path
@@ -381,9 +387,9 @@ def clustered_paths():
 
 
 def count_archive_zips(root):
-    """Files named *.zip anywhere under `root`. The March working-notes row reads
-    "Password-protected ZIP (in clusters) 614"; the archive holding no ZIP files
-    at all is what rules out reading that row as a count of archives."""
+    """Files named *.zip anywhere under `root`. The archive holding no ZIP files
+    at all is what rules out reading the password-protected-ZIP row as a count of
+    archives."""
     n = 0
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d != ".git"]
@@ -407,8 +413,6 @@ def scope_note(row, n_clustered):
 
 def build_report(sets, texts, clustered, indexed, n_zip, n_flag_all, n_dirty, runtime_s):
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    env_corpus = os.environ.get("LIBRARIAN_CORPUS")
-    prefix = f"LIBRARIAN_CORPUS={tilde(env_corpus)} " if env_corpus else ""
     n_pop = len(texts)
     filtered = {rel for rel in texts if rel in indexed}
 
@@ -419,27 +423,28 @@ def build_report(sets, texts, clustered, indexed, n_zip, n_flag_all, n_dirty, ru
 
     L = ["# Behavioral pattern scan, recomputed (ClawHub archive)", "",
          f"Generated by `{Path(__file__).name}` on {now}. Rerun with "
-         f"`{prefix}python paper/sources/scans/{Path(__file__).name}` from the "
-         "repository root.",
-         "Output defaults to `behavioral-scan-<UTC date>.md`; set `SCAN_RESULTS_OUT` to a "
+         f"`python paper/sources/scans/{Path(__file__).name}` from the "
+         "repository root, with LIBRARIAN_CORPUS set.",
+         "Output defaults to `behavioral-scan-YYYYMMDD.md`, dated by the run's UTC day; set `SCAN_RESULTS_OUT` to a "
          "full path to write elsewhere.", "",
-         "## What this reproduces, and what it cannot", "",
-         "Appendix B Table 7 (`tab:behavioral`), the two extra rows in the March "
-         "working notes, which are not part of this artifact, and the Section 4.5 sentence "
+         "## What this file reports", "",
+         "This file reports the behavioral pattern counts of Appendix B, Table 7, whose "
+         "caption reads \"Behavioral pattern scan (`behavioral_scan.py`, patterns recorded "
+         f"in the script) over the {PAPER_POPULATION:,} `SKILL.md` files of the archived "
+         f"ClawHub snapshot: {PAPER_UNION:,} files match at least one pattern, "
+         f"{PAPER_OVERLAP} of them in similarity clusters.\" The six patterns are the "
+         "regular expressions in the script's `ROWS` table, one primary per row with its "
+         "alternate readings beside it, and the comparison below checks the counts the "
+         "script produces against the published table.", "",
+         "The Section 4.5 sentence "
          f"\"Of the {PAPER_UNION:,} files matching at least "
          f"one pattern, {PAPER_OVERLAP} ({PAPER_OVERLAP_PCT}%) also appeared in similarity "
-         f"clusters\".", "",
-         "Table 7 reports the counts this script produces, so the comparison below is a "
-         "reproduction check of the shipped script against the published table.", "",
-         "**No pattern definition exists anywhere in the repository.** Not in "
-         "`librarian/cli.py` (which has no `grep` subcommand: its subcommands are scan, "
-         "where, compare-marketplaces, compare, impact, installed, find, stats, "
-         "marketplace-level, checkout, describe), not in the March working notes, "
-         "and not in any commit reachable "
-         "from any branch. The row was recorded by hand and the scan was never "
-         "archived. Every pattern below is a "
-         "reconstruction chosen for this file; a row that lands on the published count "
-         "shows the original was something close, not that it was this.", "",
+         "clusters\" is recomputed here as the union of the six primaries intersected with "
+         "the archived scan's `in_cluster` flag. Section 3.5 qualifies the counts: \"These "
+         "counts include legitimate security tools; raw figures are upper bounds on "
+         "suspicious content.\" Two further rows, SSH key references and "
+         "password-protected ZIP, come from the March working notes, which are not part "
+         "of this artifact; they are not in Table 7 and are reported separately below.", "",
          "## Population", "",
          "| population | files |", "|---|---:|",
          f"| `SKILL.md` under `{MARKETPLACE}/` in the pinned snapshot (used here) | {n_pop:,} |",
@@ -453,8 +458,9 @@ def build_report(sets, texts, clustered, indexed, n_zip, n_flag_all, n_dirty, ru
          "that filter drops. Counts are per file (a file matching a pattern twice counts "
          "once), and a file outside the `file_index` cannot be clustered. The "
          "password-protected-ZIP row is the one exception to the population: it is counted "
-         f"over the {len(clustered):,} clustered files, because the notes qualify its figure "
-         "\"(in clusters)\".", "",
+         f"over the {len(clustered):,} clustered files, because its figure is qualified "
+         "\"(in clusters)\" in the March working notes, which are not part of this "
+         "artifact.", "",
          "## Comparison: paper vs recomputed", "",
          "| Row | Paper | Recomputed (primary) | Match | Pattern used (primary) | Case |",
          "|---|---:|---:|:---:|---|---|"]
@@ -463,7 +469,7 @@ def build_report(sets, texts, clustered, indexed, n_zip, n_flag_all, n_dirty, ru
         got = len(sets[row.key][0])
         p = row.pats[0]
         mark = "yes" if got == row.paper else f"no ({got - row.paper:+d})"
-        where = "Table 7" if row.in_table else "notes only"
+        where = "Table 7" if row.in_table else "not in Table 7"
         L.append(f"| {row.label} ({where}){scope_note(row, len(clustered))} | {row.paper} | "
                  f"{got} | {mark} | {md_pattern(p.rx)} | "
                  f"{'insensitive' if p.ci else 'sensitive'} |")
@@ -480,7 +486,7 @@ def build_report(sets, texts, clustered, indexed, n_zip, n_flag_all, n_dirty, ru
           f"{len(union_filtered):,} files, overlap {len(union & clustered)} "
           f"({pct(len(union & clustered), len(union_filtered))}); the overlap is identical "
           "because only indexed files can be clustered.", "",
-          "### A note on the union", "",
+          "### The union", "",
           f"The six recomputed counts sum to "
           f"{sum(len(sets[row.key][0]) for row in table_rows):,} memberships over "
           f"{len(union):,} distinct files, because the six pattern sets are not disjoint: "
@@ -494,15 +500,15 @@ def build_report(sets, texts, clustered, indexed, n_zip, n_flag_all, n_dirty, ru
           f"{'file' if n_flag_all == 1 else 'files'} across the whole "
           f"{len(texts):,}-file population, so neither reading can be the source of 614. "
           "Read instead as ZIP **mentions** in the text "
-          f"of the {len(clustered):,} clustered files, which is what \"(in clusters)\" in "
-          "the March working notes ask for, the row lands close: "
+          f"of the {len(clustered):,} clustered files, the reading its \"(in clusters)\" "
+          "qualifier calls for, the row lands close: "
           + ", ".join(f"{len(sets['pwzip'][i])} for {md_pattern(p.rx)}"
                       for i, p in enumerate(next(r for r in ROWS if r.key == 'pwzip').pats[:3]))
-          + ". The row is plausibly a mention count inside clusters; no reading lands "
+          + ". The row is best read as a mention count inside clusters; no reading lands "
           "exactly on 614. It is not in Table 7.", "",
-          "## Alternative readings tried", "",
-          "Every candidate per row, primary first. This is the spread a reader needs in "
-          "order to judge how sensitive each count is to the pattern's wording.", "",
+          "## Alternative readings", "",
+          "Every pattern per row, primary first, so the sensitivity of each count to the "
+          "pattern's wording is visible.", "",
           "| Row | Count | Case | Pattern | Reading |", "|---|---:|---|---|---|"]
 
     for row in ROWS:
@@ -515,18 +521,20 @@ def build_report(sets, texts, clustered, indexed, n_zip, n_flag_all, n_dirty, ru
 
     L += ["", "## Provenance", "",
           "| item | value |", "|---|---|",
-          f"| corpus root | `{tilde(CORPUS)}` |",
+          # The corpus path is machine-specific, so the row names the variable, not
+          # its value.
+          "| corpus root | `$LIBRARIAN_CORPUS` |",
           f"| `{MARKETPLACE}` HEAD | {git_head(ARCHIVE)} |",
           f"| repository HEAD | {git_head(Path(__file__).resolve().parents[3])} |",
           f"| input scan | `{SCAN.name}` |",
-          f"| command | `{prefix}python paper/sources/scans/{Path(__file__).name}` |",
+          f"| command | `python paper/sources/scans/{Path(__file__).name}` |",
           f"| runtime | {runtime_s:.1f} s |",
           f"| generated | {now} |", "",
-          "The `+dirty` marker on the archive HEAD is the known case-collision checkout "
-          "artefact on macOS recorded in `order-permutation-20260907.md`: commit 16c991de "
+          "The `+dirty` marker on the archive HEAD comes from case-colliding paths, "
+          "recorded in `order-permutation-20260907.md`: commit 16c991de "
           "carries **35 case-colliding path pairs**, that is **70 paths**, of which "
-          f"**{n_dirty} files** show as modified under a case-insensitive filesystem. None of them appears in "
-          "the scan index.", ""]
+          f"**{n_dirty} files** show as modified when the archive is checked out on a "
+          "case-insensitive filesystem. None of them appears in the scan index.", ""]
     return "\n".join(L) + "\n"
 
 
@@ -543,9 +551,9 @@ def main():
         return
 
     # DESIGN RATIONALE: a wrong corpus yields plausible numbers that mean nothing,
-    # and the previous version only warned, then wrote the results file anyway.
-    # require_corpus() has already stopped an unset or missing LIBRARIAN_CORPUS at
-    # import; this check is the one it cannot make, that the snapshot holds the archive.
+    # so it stops the run rather than warning. require_corpus() has already stopped
+    # an unset or missing LIBRARIAN_CORPUS at import; this check is the one it
+    # cannot make, that the snapshot holds the archive.
     if not ARCHIVE.is_dir():
         print(f"corpus directory {tilde(ARCHIVE)} not found; set LIBRARIAN_CORPUS to a "
               "snapshot that contains it", file=sys.stderr)
@@ -555,7 +563,7 @@ def main():
     print(f"population: {len(texts):,} SKILL.md files under {tilde(ARCHIVE)}")
     if len(texts) != PAPER_POPULATION:
         print(f"population is {len(texts):,} SKILL.md files, the paper's is "
-              f"{PAPER_POPULATION:,}: this is not the March snapshot the published counts "
+              f"{PAPER_POPULATION:,}: this is not the pinned snapshot the published counts "
               "came from. Nothing written.", file=sys.stderr)
         sys.exit(2)
 

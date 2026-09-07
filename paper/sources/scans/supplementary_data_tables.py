@@ -1,35 +1,74 @@
 #!/usr/bin/env python3
 """Five supplementary data tables computed from files already in the artifact.
 
-The five, in the order the output file reports them:
+The five, in the order the output file reports them, and the part of the paper
+each supports (section numbers follow the order of the paper's section and
+subsection headings; table numbers follow caption order):
 
-  1. Precision by cluster size band, at cluster and file level.
+  1. Precision by cluster size band, at cluster and file level. Supports
+     Table 4, "Precision and recall at cluster size thresholds", and the
+     caption's statement that only the >= 20 and >= 10 rows reproduce from
+     the released ground truth (Section 4.4).
   2. Benign content inside attributed clusters: how much unattributed content
-     sits inside the clusters credited as true positives.
-  3. Payload-indicator recall for unclustered files: would a grep for the
+     sits inside the clusters credited as true positives (Table 4 again, read
+     from the operator's side).
+  3. Payload-indicator recall for the seven unclustered files of Section 5.3,
+     "none of these 7 files landed in any cluster": would a grep for the
      iocs.json payload indicators have found what clustering found, and what
      would it add?
-  4. Filter effects: does the tokenizer include the YAML frontmatter, does the
-     100-character filter apply before or after tokenization, and can an indexed
-     document be shorter than three words?
+  4. Filter effects: whether the tokenizer includes the YAML frontmatter,
+     whether the 100-character filter applies before or after tokenization,
+     and whether an indexed document can be shorter than three words
+     (Section 3.2, "minimum of 100 characters of content"; Section 3.3,
+     "individual words were used as shingles").
   5. Populations and denominators: the 341 / 354 / 352 / 351 / 337 counts and
-     how each maps to the abstract's within-archive recall claim.
+     how each maps to the abstract's within-archive recall claim (Section 4.4,
+     "of the 352 scanned, 351 appeared in clusters").
 
-Inputs are the archived 2026-03-14 scan, `paper/iocs.json`, and the pinned March
-corpus named by LIBRARIAN_CORPUS. Nothing here reads the live checkout, and
-nothing here edits the paper.
+Inputs, all read-only:
+  scan_20260314_threshold90_skillonly.json   the archived scan, beside this script
+  paper/iocs.json                            the released ground truth
+  file-level-precision-20260907.md,
+  threshold-sweep-20260314.md                results files beside this script,
+                                             read only to check the lines cited
+  librarian/core.py, librarian/cli.py        the released tool, resolved by
+                                             content hash (see `release_source`)
+  LIBRARIAN_CORPUS                           the pinned March corpus, a checkout
+                                             of each repository at the commit
+                                             recorded in
+                                             paper/supplementary/repository-commits.md;
+                                             section 4 walks it and the content
+                                             marker reads file text from it
+  paper/main-acm.tex                         optional; not part of the artifact.
+                                             When present, every paper quote is
+                                             verified against it; when absent the
+                                             run prints "paper quotes not
+                                             verified" and continues, and the
+                                             rendered quotes are identical.
 
-This script reproduces the MARCH tool's behaviour deliberately, and that is now
-a deliberate divergence from the tool on disk: the March walk skipped any path
-whose string contained "backup", and on 2026-09-07 that substring rule was
-replaced by a test on directory components only (`librarian.core.is_backup_path`).
-The reconstruction in `answer_tokenization` and the `backup_in_path` field in
-`resolve_absent` keep the old rule on purpose, because their job is to say what
-the archived scan saw. They implement the rule the archived scan applied; the numbers
-in the output file are the March tool's.
+Environment:
+  LIBRARIAN_CORPUS              required; see above
+  SUPP_TABLES_TOOL_REVISIONS    comma-separated git refs to search for the
+                                released `librarian/` bytes; RELEASE_BLOBS is the
+                                authority, so a ref carrying different code is
+                                refused
+  SUPP_TABLES_REDACT_HISTORY=1  render the repository commit row as a
+                                placeholder, which is the released rendering
+
+Output: paper/supplementary/supplementary-data-tables.md, overwritten each run.
+Nothing here edits the paper.
+
+Run, with LIBRARIAN_CORPUS set and SUPP_TABLES_REDACT_HISTORY=1:
+  python paper/sources/scans/supplementary_data_tables.py
+
+The "backup" path rule. The released tool skips any path whose string contains
+"backup" before it reads the file, and the archived scan was made with that
+rule. `answer_tokenization` and the `backup_in_path` field of `resolve_absent`
+apply the same substring test so that the walk here sees what the archived
+scan saw; the numbers in the output file are the released tool's.
 
 The content-marker logic for section 3 is imported from `file_level_precision.py`
-rather than restated, so the two files cannot drift: `payload_indicators`,
+rather than restated, so the two files apply one rule: `payload_indicators`,
 `ContentMarker`, `account_of` and `WEAK_INDICATOR` all come from there.
 
 DESIGN RATIONALE for CODE CITATIONS: a line citation into a source file goes
@@ -38,44 +77,20 @@ results-file citation this script emits is checked at startup against the
 literal it is supposed to point at, and the run aborts if one has moved. A
 stale citation is then a failed run rather than a wrong external document.
 
-DESIGN RATIONALE for PAPER CITATIONS: the paper is the one input that moves
-under editing, so it is never cited by line number here. A paper citation is a
+DESIGN RATIONALE for PAPER CITATIONS: the paper's tex is not part of the
+artifact, so a line number into it is nothing a reader could check; it is never
+cited by line number here. A paper citation is a
 section number plus a verbatim quote of under twelve words. At generation time
 the quote is located in `paper/main-acm.tex` with whitespace collapsed, so a
 quote may span a line break, and the section number the tex implies is compared
 against the number declared in PAPER_QUOTES; a mismatch on either aborts the run,
-and an absent tex skips the check rather than failing it.
-The rendered file carries only the section number and the quote, so a reader
-needs no copy of the tex to check it, and no line number can go stale in it.
+and an absent tex skips the check rather than failing it. The rendered file
+carries only the section number and the quote, so a reader needs no copy of the
+tex to check it, and no line number can go stale in it.
 
 Every answer function has a self-test on toy inputs, run before any real input
 is read, so a broken counting rule fails on three hand-checked clusters rather
 than silently on 2,622 real ones.
-
-
-Inputs: `scan_20260314_threshold90_skillonly.json`, `paper/iocs.json`,
-`file-level-precision-20260907.md`, `threshold-sweep-20260314.md`, and the released
-`librarian/core.py` and `librarian/cli.py`. LIBRARIAN_CORPUS (optional) names the
-pinned March corpus and is read only where a table needs file text. Nothing reads a
-live checkout and nothing edits the paper.
-
-`paper/main-acm.tex` is used to verify the paper quotes and is NOT part of the released
-artifact. When it is absent the run prints "paper quotes not verified" and continues;
-the rendered file still carries each quote with its declared section number.
-
-Environment:
-  LIBRARIAN_CORPUS              pinned March corpus (optional; see above)
-  SUPP_TABLES_TOOL_REVISIONS    comma-separated revisions to search for the released
-                                `librarian/` bytes; RELEASE_BLOBS is the authority, so
-                                a revision carrying different code is refused
-  SUPP_TABLES_REDACT_HISTORY=1  render the private repository commit as a placeholder,
-                                which is the released rendering
-
-Output: `paper/supplementary/supplementary-data-tables.md`, overwritten each run.
-
-Run:
-  SUPP_TABLES_REDACT_HISTORY=1 LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS python \
-    paper/sources/scans/supplementary_data_tables.py
 """
 import datetime
 import hashlib
@@ -106,19 +121,19 @@ PAPER = REPO / "paper" / "main-acm.tex"
 OUT = REPO / "paper" / "supplementary" / "supplementary-data-tables.md"
 
 # The released tool: the public repository's release commit, and the only
-# revision tried by default.
+# git ref tried by default.
 RELEASE_COMMIT = "b55ceff1fde1ef0678a62067d7e0a6cdac852b3e"
 
-# Revisions `release_source` will try, in order. A checkout that carries the
-# released modules under some other revision name adds it here rather than in
-# the source, since a revision name that resolves in one clone and not another
-# is a property of the clone:
+# Git refs `release_source` will try, in order. A checkout that carries the
+# released modules under some other ref name adds it here rather than in the
+# source, since a ref name that resolves in one clone and not another is a
+# property of the clone:
 #     SUPP_TABLES_TOOL_REVISIONS="b55ceff,origin/main"
 # This is a convenience for finding the bytes, never a licence to trust them.
 # RELEASE_BLOBS below is the authority: whatever a lookup returns must hash to
-# these, so a citation is never checked against a drifted tree, and an added
-# revision that carries different code is refused exactly like a drifted
-# working tree.
+# these, so a citation is never checked against a tree that differs from the
+# release, and an added ref that carries different code is refused exactly
+# like a working tree that differs from it.
 TOOL_REVISIONS = tuple(r.strip() for r in os.environ.get(
     "SUPP_TABLES_TOOL_REVISIONS", RELEASE_COMMIT).split(",") if r.strip())
 
@@ -127,7 +142,7 @@ RELEASE_BLOBS = {
     CLI: "96cfd205e1f971fdc4f02b7cdcb16589f3b7f7778c15ca9c18ffcb9f53080ba3",
 }
 
-# The repository commit this run was made from. It names a revision only someone
+# The repository commit this run was made from. It names a commit only someone
 # with that history can resolve, so the released copy renders a placeholder.
 # Set SUPP_TABLES_REDACT_HISTORY=1 to produce the released rendering.
 HISTORY_PLACEHOLDER = "<private-history>"
@@ -157,10 +172,10 @@ PYTHON_PLACEHOLDER = "python"
 
 # The "backup" path rule as the released tool carries it: a substring test over
 # the whole path. Cited wherever the output file explains why 864 SKILL.md files
-# never reached the scan. The later fix that narrows the rule to the scan root's
-# own first path component is NOT in the released revision, so it has no citation
-# here and the prose says so rather than pointing at a line no reader can open.
-MARCH_BACKUP_RULE = (CORE, 227)
+# never reached the scan. Narrowing the rule to the scan root's own first path
+# component is not in the released tool, so no citation exists for it and the
+# prose describes it without pointing at a line.
+RELEASE_BACKUP_RULE = (CORE, 227)
 
 # Every (file, line, literal) the output file cites, checked at startup.
 # `cite()` refuses to render a (file, line) that is not in this list, so a
@@ -170,7 +185,7 @@ MARCH_BACKUP_RULE = (CORE, 227)
 # this script runs in.
 CITATIONS = [
     (CORE, 32, "SHINGLE_SIZE = 3"),
-    (*MARCH_BACKUP_RULE, 'if "backup" in str(md_file).lower():'),
+    (*RELEASE_BACKUP_RULE, 'if "backup" in str(md_file).lower():'),
     (CORE, 152, "text = text.lower()"),
     (CORE, 153, r"re.sub(r'\s+', ' ', text).strip()"),
     (CORE, 155, "DESIGN RATIONALE: Keep dashes and alphanumerics"),
@@ -212,6 +227,14 @@ PAPER_QUOTES = [
     ("4.4", "narrower hightower6eu subset (354 IOC slugs)"),
     ("4.4", "of the 352 scanned, 351 appeared in clusters"),
     ("4.4", "rows reproduce from the released ground truth"),
+    ("4.4", "Precision and recall at cluster size thresholds"),
+    ("3.2", "minimum of 100 characters of content"),
+    ("3.2", "the scanner had skipped any path containing"),
+    ("3.3", "individual words were used as shingles"),
+    ("5.3", "none of these 7 files landed in any cluster"),
+    ("5.3", "motivate pairing it with behavioral scanning"),
+    ("6", "cluster only with each other"),
+    ("abstract", "a within-archive recall expected by construction for template-reuse campaigns"),
 ]
 
 MAX_QUOTE_WORDS = 12
@@ -227,19 +250,18 @@ _RELEASE_CACHE = {}
 def release_source(rel: str) -> str:
     """Return a released `librarian/` module's text, verified by content hash.
 
-    DESIGN RATIONALE: the first version of this script resolved `librarian/`
-    citations as `REPO / "librarian" / "core.py"`, that is, against whatever
-    tree it happened to run in. Run in the private repository, that tree was
-    123 lines ahead of the released commit, so the guard passed while twenty of
-    twenty-one emitted line numbers pointed at unrelated code in the only tree a
-    reader can open. Resolution now goes to the release, and the content hash is
-    the authority rather than the revision name: a lookup that finds the right
-    bytes is accepted whatever produced it, and a lookup that finds anything
-    else is refused even if it came from a revision with the expected name.
+    DESIGN RATIONALE: a `librarian/` citation must point at a line of the tool
+    a reader can open, which is the release commit, not whatever tree this
+    script happens to run in. A checkout ahead of the release would pass a
+    line-number check while the emitted numbers pointed at unrelated code.
+    Resolution therefore goes to the release, and the content hash is the
+    authority rather than the ref name: a lookup that finds the right bytes is
+    taken whatever produced it, and a lookup that finds anything else is
+    refused even if it came from a ref with the expected name.
 
-    Tried in order: `git show` on each revision in TOOL_REVISIONS, then the
-    working tree, which is itself correct when this script runs inside a
-    checkout of the release.
+    Tried in order: `git show` on each ref in TOOL_REVISIONS, then the working
+    tree, which is itself correct when this script runs inside a checkout of
+    the release.
     """
     if rel in _RELEASE_CACHE:
         return _RELEASE_CACHE[rel]
@@ -268,7 +290,7 @@ def release_source(rel: str) -> str:
     raise AssertionError(
         f"cannot resolve the released {rel} (sha256 {want}); tried: "
         + "; ".join(tried)
-        + ". Check out the released tool, or name a revision that carries it in"
+        + ". Check out the released tool, or name a git ref that carries it in"
           " SUPP_TABLES_TOOL_REVISIONS.")
 
 
@@ -304,11 +326,10 @@ def cite(path, lineno: int) -> str:
     """Render a citation as `relative/path.py:NN`, refusing unpinned lines.
 
     DESIGN RATIONALE: check_citations only verifies the CITATIONS list, so a
-    citation emitted with a line that is not in that list was never checked at
-    all. On 2026-09-07 that gap shipped ten wrong line numbers into a
-    supplementary file while the guard printed success. Rendering now goes
-    through the same list the guard walks, and an unpinned line is an error
-    rather than a plausible-looking reference.
+    citation emitted with a line that is not in that list would never be
+    checked at all, and could render a plausible-looking wrong number while
+    the guard printed success. Rendering therefore goes through the same list
+    the guard walks, and an unpinned line is an error.
     """
     if (str(path), lineno) not in _PINNED:
         raise AssertionError(
@@ -326,7 +347,7 @@ def normalized_with_lines(text: str):
 
     A quote may therefore span a line break in the tex and still be located,
     which is what lets the quotes read as sentences rather than as fragments of
-    whatever line the author happened to wrap on.
+    whichever line the tex wraps on.
     """
     chars, line_of = [], []
     for lineno, raw in enumerate(text.splitlines(), start=1):
@@ -452,7 +473,7 @@ def normalize(text: str) -> list:
 
     Mirrors the four normalization statements of `librarian.core.tokenize`,
     which CITATIONS pins by literal rather than by number so this comment cannot
-    go stale again. Kept as a separate function so the token count of a file can
+    go stale. Kept as a separate function so the token count of a file can
     be reported without rebuilding its shingles, and cross-checked against the
     real tokenizer in the self-test.
     """
@@ -510,13 +531,11 @@ def answer_tokenization(scan, corpus_root: Path) -> dict:
         for path in base.rglob("*.md"):
             if path.name != "SKILL.md":
                 continue
-            # DELIBERATE REPRODUCTION OF THE MARCH BEHAVIOUR. The tool the March
-            # scan ran skipped any path containing "backup", before the size test
-            # and before tokenization, so these files never reached the scan. That
-            # substring rule was replaced on 2026-09-07 by a directory-component
-            # test (see MARCH_BACKUP_RULE / CURRENT_BACKUP_RULE above); this line
-            # keeps the old rule on purpose, because its job is to reconstruct the
-            # archived scan, not to run the current tool.
+            # The released tool skips any path containing "backup", before the
+            # size test and before tokenization, so these files never reached the
+            # archived scan. This line applies the same substring test
+            # (RELEASE_BACKUP_RULE) on purpose: its job is to see what the archived
+            # scan saw.
             if "backup" in str(path).lower():
                 backup_skipped[mp] += 1
                 continue
@@ -624,11 +643,10 @@ def resolve_absent(slugs, corpus_root: Path, account=IOC_ACCOUNT, marketplace=CL
 
     A slug can be missing from the scan for two different reasons, and the
     difference matters: the file was never in the snapshot, or the file is there
-    and the March walk skipped it. That walk skipped any path containing
+    and the walk skipped it. The released tool's walk skips any path containing
     "backup", so a slug whose name carries that substring is present on disk and
-    absent from the index. `backup_in_path` below applies the old substring rule
-    on purpose, to reproduce the archived scan; the current tool tests directory
-    components instead (CURRENT_BACKUP_RULE).
+    absent from the index. `backup_in_path` applies that substring test on
+    purpose, to reproduce the archived scan (RELEASE_BACKUP_RULE).
     """
     out = []
     for slug in sorted(slugs):
@@ -917,15 +935,26 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
 
     a("# Supplementary data tables")
     a("")
-    a(f"Generated {prov['date']}. Five tables computed from material already in the"
-      " artifact: the archived scan, the released ground truth, and the pinned March"
-      " corpus. No new experiment is involved, and no number here depends on anything"
-      " outside those three inputs.")
+    a(f"Generated {prov['date']}. This file reports five tables computed from material"
+      " already in the artifact: the archived scan, the released ground truth, and the"
+      " pinned March corpus. No new experiment is involved, and no number here depends on"
+      " anything outside those three inputs. Sections 1 and 2 support Table 4 of the paper"
+      f" ({paper_ref('Precision and recall at cluster size thresholds')}) and its caption's"
+      " statement that only the >= 20 and >= 10 rows reproduce from the released ground"
+      f" truth ({paper_ref('rows reproduce from the released ground truth')}). Section 3"
+      " supports the paper's account of the singleton blind spot"
+      f" ({paper_ref('none of these 7 files landed in any cluster')}). Section 4 supports"
+      " the description of the content filter and the tokenizer"
+      f" ({paper_ref('minimum of 100 characters of content')};"
+      f" {paper_ref('individual words were used as shingles')}). Section 5 supports the"
+      f" recall denominators ({paper_ref('of the 352 scanned, 351 appeared in clusters')})"
+      " and the abstract's within-archive recall claim"
+      f" ({paper_ref('all 337 Koi-documented malicious skills present in the corpus')}).")
     a("")
     a("Sources. `scan_20260314_threshold90_skillonly.json` is the archived 90 percent"
       " Jaccard, `SKILL.md`-only scan that every published number rests on."
-      " `paper/iocs.json` is the released ground truth. The pinned March corpus is the"
-      " reconstruction of the snapshot from the commit SHAs in"
+      " `paper/iocs.json` is the released ground truth. The pinned March corpus is a"
+      " checkout of each repository at the commit SHA recorded in"
       " `paper/supplementary/repository-commits.md`. Numbers below labeled *computed*"
       f" come from `{prov['script']}`, whose provenance table records the inputs and the"
       " command; numbers labeled with a file and a line are quoted from that line; numbers"
@@ -933,9 +962,7 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       " so no line number in this file can go stale.")
     a("")
     a("Every `librarian/` line cited below is a line of the **released** tool, the commit"
-      " named in the table above, not of whatever tree this file was generated in. The"
-      " later change to the backup-path filter is not in that revision, so this file"
-      " describes its effect without citing a line for it.")
+      " named in the table below, not of any later commit.")
     a("")
     a("| input | value |")
     a("|:--|:--|")
@@ -948,16 +975,17 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
     a(f"| paper quotes | {prov['quotes']} |")
     a(f"| command | `{prov['command']}` |")
     a("")
-    a(f"`{CORPUS_PLACEHOLDER}` is the value of `LIBRARIAN_CORPUS`, a checkout pinned to the"
-      f" snapshot the paper used; `{PYTHON_PLACEHOLDER}` is any Python 3.10 or later"
-      " interpreter with the repository root importable.")
+    a("The command runs with `LIBRARIAN_CORPUS` set to a checkout pinned to the snapshot"
+      " the paper used and with `SUPP_TABLES_REDACT_HISTORY=1`, which renders the"
+      f" repository commit row as the placeholder above; `{PYTHON_PLACEHOLDER}` is any"
+      " Python 3.10 or later interpreter with the repository root importable.")
     a("")
 
     # ---------------- section 1 ----------------
     a("## 1. Precision by cluster size band")
     a("")
-    a("The published precision table reports cumulative thresholds, which hides what"
-      " happens between sizes 2 and 9: the >= 5 row includes the 11 clusters at >= 20 that"
+    a("Table 4 of the paper reports cumulative thresholds, which do not separate"
+      " sizes 2 through 9: the >= 5 row includes the 11 clusters at >= 20 that"
       " carry most of the signal. The bands below are disjoint, so each row says what an"
       " operator would see if they triaged only clusters of that size.")
     a("")
@@ -988,14 +1016,14 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       f" {band['rows'][0]['tp']}. That is not a viable operating point. Size is doing the"
       " work in this method, and below 10 it stops working.")
     a("")
-    a("Two caveats. First, the bands below 10 are exactly the region the paper's own"
-      " precision-and-recall table caption disclaims: only the >= 20 and >= 10 rows"
+    a("Two caveats. First, the bands below 10 are exactly the region the caption of"
+      " Table 4 disclaims: only the >= 20 and >= 10 rows"
       " reproduce from the released ground truth"
-      f" ({paper_ref('rows reproduce from the released ground truth')}). The March hand"
+      f" ({paper_ref('rows reproduce from the released ground truth')}). The hand"
       " triage that produced the published >= 5 row (60 of 163) used a payload-inspection"
-      " clause whose per-cluster decisions were never written down, so the 5-9 band here,"
-      " credited by account attribution alone, should be read as a lower bound on what a"
-      " full triage would allow, not as a restatement of the published row. Second, file"
+      " clause whose per-cluster decisions are not part of the artifact, so the 5-9 band"
+      " here, credited by account attribution alone, should be read as a lower bound on"
+      " what a full triage would allow, not as a restatement of the published row. Second, file"
       " counts are cluster memberships; 86 files sit in more than one cluster, which is why"
       f" the memberships total {band['files']:,} exceeds the {ben['distinct']:,} distinct"
       " clustered files.")
@@ -1079,7 +1107,9 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       " `file_level_precision.py` `EXTRA_LITERALS`), so it carries no vendor provenance and"
       " a hit resting on it alone is the weakest evidence in this section.")
     a("")
-    a(f"**The seven singletons.** All {len(pay['singletons'])} carry a payload indicator,"
+    a("**The seven singletons.** These are the `moonshine-100rze` and `anisafifi` files"
+      f" the paper describes ({paper_ref('none of these 7 files landed in any cluster')})."
+      f" All {len(pay['singletons'])} carry a payload indicator,"
       " and every one of them shares at least one indicator with files that did cluster and"
       " that belong to documented accounts.")
     a("")
@@ -1099,8 +1129,9 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       " grouping would use, not the grouping itself, and building it properly means deciding"
       " how to weight an indicator and what counts as a link. The indicators cost nothing to"
       " obtain, since they come from the same vendor reports that supply the ground truth, so"
-      " the hybrid design the limitations section gestures at looks reachable rather than"
-      " proven.")
+      " the pairing with behavioral scanning that the paper calls for"
+      f" ({paper_ref('motivate pairing it with behavioral scanning')}) looks reachable"
+      " rather than proven.")
     a("")
     a("**What payload grep alone would and would not do.** Run over every unclustered file"
       " in the corpus, the marker is far weaker than the clustering it would supplement.")
@@ -1247,33 +1278,33 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       f" Chinese instructions that normalize to {tok['min_tokens']} tokens. Nothing in the"
       " paper's results turns on this, since the corpus is overwhelmingly English, but a"
       " registry deploying the method on a multilingual corpus would need a"
-      " Unicode-aware tokenizer, and that belongs in the limitations rather than in a"
-      " footnote.")
+      " Unicode-aware tokenizer.")
     a("")
     a("**A second filter sat ahead of the size test.** The walk skipped any path whose"
       " string contained \"backup\", case-folded, before it read the file"
-      f" ({cite(*MARCH_BACKUP_RULE)}). On the pinned corpus that removes"
+      f" ({cite(*RELEASE_BACKUP_RULE)}), as the paper states"
+      f" ({paper_ref('the scanner had skipped any path containing')}). On the pinned"
+      " corpus that removes"
       f" {tok['backup_skipped']} `SKILL.md` files from consideration: "
       + ", ".join(f"{n} in `{mp}`" for mp, n in tok["backup_by_marketplace"])
       + ". The rule was written to skip vendored backup directories, and it does that, but"
       " it matched on the whole path, so it also dropped any skill whose own name contains"
-      " the word. Section 5 below has an instance that matters. Of the 864, 780 were that"
+      " the word. Section 5 below shows one instance. Of the 864, 780 were that"
       " intended tree in `claude-code-plugins-plus`, 2 were skills whose own directory is"
-      " named `backups` or `backup`, and 82 were collateral from the substring match. A"
-      " later change narrows the test to the scan root's own first path component, so that"
-      " a marketplace's top-level `backups/` tree is skipped and nothing else is; that"
-      " change is not in the released revision, and it has no line to cite here. A tool"
-      " carrying it indexes 84 more files than the scan reported above. The numbers in this"
-      " document are the released tool's and are unaffected.")
+      " named `backups` or `backup`, and 82 were collateral from the substring match."
+      " Narrowing the test to the scan root's own first path component, so that a"
+      " marketplace's top-level `backups/` tree is skipped and nothing else is, would"
+      " admit 84 more files; the released tool does not do that, and the numbers in this"
+      " document are the released tool's.")
     a("")
     if tok["kept_not_indexed"] or tok["indexed_not_kept"]:
         a("One caveat on the replication. The walk over the pinned corpus finds"
           f" {tok['kept']:,} files passing the filter against the archived scan's"
           f" {tok['indexed']:,}. The whole difference is"
-          f" {len(tok['kept_not_indexed'])} file present in the reconstruction and absent"
-          f" from the March scan"
+          f" {len(tok['kept_not_indexed'])} file present in the pinned corpus and absent"
+          f" from the archived scan"
           f" (`{tok['kept_not_indexed'][0][0]}/{tok['kept_not_indexed'][0][1]}`, a"
-          " directory that exists only in this corpus copy and not in the March scan), with nothing missing in"
+          " directory the archived scan did not index), with nothing missing in"
           " the other direction. Every file in the archived scan resolves under the pinned"
           " corpus, so the token counts above cover the whole scan.")
         a("")
@@ -1293,8 +1324,9 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
     a("| unclustered memberships (`summary.unclustered_files`) |"
       f" {ben['corpus'] - ben['memberships']:,} |")
     a("")
-    a("The ground-truth denominators next. There are two independent lists in play and the"
-      " paper moves between them, which is what makes the numbers hard to follow.")
+    a("The ground-truth denominators next. The paper uses two independent lists, Koi's"
+      f" slug list and the `{IOC_ACCOUNT}` slugs recorded in `iocs.json`, and this table"
+      " says which number belongs to which.")
     a("")
     a("| number | what it counts | recomputable from the artifact | source |")
     a("|---:|:--|:--|:--|")
@@ -1312,7 +1344,7 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       + paper_ref("narrower hightower6eu subset (354 IOC slugs)") + " |")
     a(f"| {den['present']} | of those {den['slugs']}, the slugs the scan indexed. The"
       f" other {den['slugs'] - den['present']} are on disk and were skipped by the walk's"
-      f" \"backup\" path rule ({cite(*MARCH_BACKUP_RULE)}), not missing from the snapshot |"
+      f" \"backup\" path rule ({cite(*RELEASE_BACKUP_RULE)}), not missing from the snapshot |"
       " yes | computed; " + paper_ref("of the 352 scanned, 351 appeared in clusters") + " |")
     a(f"| {den['clustered']} | of those {den['present']}, the slugs whose file landed in a"
       " cluster | yes | computed; "
@@ -1333,17 +1365,16 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       f" ({paper_ref('narrower hightower6eu subset (354 IOC slugs)')}).")
     a("")
     a(f"**The chain from {den['slugs']} to {den['clustered']}.**"
-      " Two slugs the paper once described as absent from the corpus are present:"
-      " they were skipped by the backup-path filter"
-      f" ({paper_ref('of the 352 scanned, 351 appeared in clusters')}). Both"
+      f" Two of the {den['slugs']} slugs were skipped by the backup-path filter, as the"
+      f" paper states ({paper_ref('of the 352 scanned, 351 appeared in clusters')}). Both"
       f" ({', '.join('`' + d['slug'] + '`' for d in den['absent_detail'])}) sit in the"
       " pinned corpus at "
       + " and ".join(f"{d['bytes']:,} bytes" for d in den["absent_detail"])
-      + ", and the scan never saw them because the March walk's rule"
-      f" ({cite(*MARCH_BACKUP_RULE)}) skipped any path containing \"backup\" and both slug"
+      + ", and the scan never saw them because the walk's rule"
+      f" ({cite(*RELEASE_BACKUP_RULE)}) skipped any path containing \"backup\" and both slug"
       " names do. The same rule removes"
-      f" {tok['backup_skipped']} `SKILL.md` files corpus-wide. What effect this has on the"
-      " published recall figure is a separate question, not tested here; the"
+      f" {tok['backup_skipped']} `SKILL.md` files corpus-wide. The paper reports that the"
+      f" two, when scanned, cluster only with each other ({paper_ref('cluster only with each other')}); the"
       f" point for the denominator table is that {den['slugs'] - den['present']} of the"
       f" {den['slugs']} left the count through the tool's path filter rather than through"
       f" upstream deletion. Of the {den['present']} the scan did index,"
@@ -1363,9 +1394,10 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       f"{pct(den['clustered'] / den['present'], 1)} against the slugs the scan indexed, and"
       f" {den['clustered']}/{den['slugs']} = {pct(den['clustered'] / den['slugs'], 1)}"
       f" against the recorded slugs, {cite(SWEEP, 22)}). Three different denominators"
-      " produce three different figures, all of them correct for their own list. A scoping"
-      " sentence for the 100 percent figure would say that it is within-archive recall"
-      " against Koi's 341-slug list on a single template-flood campaign class.")
+      " produce three different figures, all of them correct for their own list. The"
+      " abstract scopes the 100 percent figure as within-archive recall against Koi's"
+      " 341-slug list on a single template-reuse campaign class"
+      f" ({paper_ref('a within-archive recall expected by construction for template-reuse campaigns')}).")
     a("")
 
     a("## What is not computed here, and why")
@@ -1375,9 +1407,9 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       " documented, and the individual verdicts live behind the Clawdex per-skill API"
       f" ({paper_ref('We treated the 341 original IOC slugs from the Clawdex database')})."
       " Both figures are quoted from the paper, not recomputed.")
-    a("- The published >= 15, >= 5 and all-clusters rows of the precision-and-recall table."
-      " Those record the March hand triage whose per-cluster decisions were not written"
-      " down. The band table above credits the same clusters by account attribution, which"
+    a("- The published >= 15, >= 5 and all-clusters rows of Table 4."
+      " Those record the hand triage of Section 4.4, whose per-cluster decisions are not"
+      " part of the artifact. The band table above credits the same clusters by account attribution, which"
       " is a different and stricter rule, and it is labeled as such rather than presented as"
       " a reproduction.")
     a("- Anything requiring a new scan, a temporal split, or a paraphrase experiment. Every"
@@ -1525,8 +1557,7 @@ def main() -> int:
         "release": RELEASE_COMMIT,
         "quotes": ("verified against `paper/main-acm.tex`" if verified
                    else "not verified: `paper/main-acm.tex` not present"),
-        "command": f"LIBRARIAN_CORPUS={CORPUS_PLACEHOLDER} {PYTHON_PLACEHOLDER}"
-                   f" {Path(__file__).resolve().relative_to(REPO)}",
+        "command": f"{PYTHON_PLACEHOLDER} {Path(__file__).resolve().relative_to(REPO)}",
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("\n".join(render(prov, tok, den, pay, band, ben, study, antiy)) + "\n")

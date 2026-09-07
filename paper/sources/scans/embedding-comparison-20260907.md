@@ -1,11 +1,15 @@
 # Sentence-embedding baseline (Section 5.2 recompute)
 
-Recompute of the Sentence-BERT baseline in Section 5.2 ("Embeddings produced 3,626
-clusters covering 9,462 files") and Figure 3,
-which the paper reports with no archived results file. The original run read a local
-index file and an unpinned checkout, neither of which survives, so its figures had no
-reproducible artifact;
-this run reads the archived scan's `file_index` against a pinned March corpus snapshot.
+This file reports a recompute of the sentence-embedding baseline that Section 5.2
+(Comparison with Simple Baselines) sets beside MinHash and TF-IDF, and that Figure 3
+plots. It supports these Section 5.2 sentences: "We encoded every file that decodes as
+UTF-8 (31,626 of 31,634) with the sentence-transformers model all-MiniLM-L6-v2
+(384-dimensional embeddings, first 2,048 characters per file) and clustered at 0.9 cosine
+similarity. Embeddings produced 3,626 clusters covering 9,462 files (29.9%) with 99.7%
+recall. Precision fell between TF-IDF and MinHash: P@$\geq$20 was 92.9% (13/14) and
+P@$\geq$10 was 62.8% (27/43). Runtime was 924 s (805 s encoding, 119 s clustering),
+three times slower than MinHash." The run reads the archived scan's `file_index` against
+the pinned corpus snapshot and writes every recomputed figure beside the published one.
 
 ## Provenance
 
@@ -27,15 +31,15 @@ this run reads the archived scan's `file_index` against a pinned March corpus sn
 | Repository HEAD | `<private-history>` |
 | Run at | 2026-09-07T06:01:24+00:00 |
 
-The published run used the package versions in the table above; any environment with a
-working `sentence-transformers` reproduces it. Nothing pins those versions: there is no
-lock file, and no results file from March records them.
+The package versions in the table are the ones this run used, and the published figures
+reproduce under them. No lock file pins them, so a rerun records its own.
 
-Command, as run. Every non-default flag is interpolated from the run itself, so copying this
-block out and running it reproduces the numbers below rather than the script's defaults:
+Command, as run, with LIBRARIAN_CORPUS set. Every non-default flag is interpolated from
+the run itself, so copying this block out and running it reproduces the numbers below
+rather than the script's defaults:
 
 ```
-LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS HF_HUB_OFFLINE=1 TOKENIZERS_PARALLELISM=false \
+HF_HUB_OFFLINE=1 TOKENIZERS_PARALLELISM=false \
   python \
   paper/sources/scans/embedding_comparison.py \
   --decode strict
@@ -52,8 +56,7 @@ LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS HF_HUB_OFFLINE=1 TOKENIZERS_PARALLELISM=false
 
 The paper reports one 924 s figure split 805 s encode / 119 s cluster. Its "cluster" number
 covers similarity and clustering together, so compare it against the sum of the last two
-rows (4.0 s). Runtimes here are not comparable to the published figures:
-the run shared its CPU with unrelated work.
+rows (4.0 s). Runtimes here are not comparable to the published figures: wall time depends on the machine and its load.
 
 Snapshot the numbers above and below were computed from. Compare against
 `paper/supplementary/repository-commits.md`. Listed here are the 32 marketplaces that
@@ -112,23 +115,23 @@ are not read by this script and so are not pinned by it.
 
 ## Rules
 
-The paper states none of these rules; they are stated here in full.
+Section 5.2 gives the model, the population ("every file that decodes as UTF-8 (31,626 of
+31,634)"), the 2,048-character truncation, the 0.9 cosine threshold and the greedy
+first-match rule. The remaining rules are stated here in full.
 
 - **Encoded unit.** The first 2048 characters of each file, decoded as UTF-8 with
   `errors="strict"`, encoded by `all-MiniLM-L6-v2` on CPU in batches of 64. Files under
   100 characters are skipped (0 here).
-- **Decoding.** Eight indexed files are not valid UTF-8, and whether they enter the corpus is
-  what separates the published document count from the full index. `--decode strict` drops
-  them, which is the population behind the published figures, and names the files it drops;
-  `--decode replace` (the default) substitutes U+FFFD and encodes everything the index names.
-  The two give different document counts, so the mode is in the provenance table above.
+- **Decoding.** Eight indexed files are not valid UTF-8. `--decode strict` skips them, which
+  gives the population Section 5.2 states, and names the files it drops; `--decode replace`
+  (the script default) substitutes U+FFFD and encodes everything the index names. The two
+  give different document counts, so the mode is in the provenance table above.
 - **File list.** The archived scan's `file_index`, resolved as `$LIBRARIAN_CORPUS/<marketplace>/<path>`,
   mirroring `order_permutation.load_files`. A bare `$LIBRARIAN_CORPUS/<path>` fallback is not used, so a
   path that does not resolve is a skip.
-- **Similarity.** Cosine, computed as a matmul of L2-normalised embeddings, in row batches of
-  1000. Entirely in torch: torch 2.2.2 here was built against NumPy 1.x and
-  `Tensor.numpy()` raises `RuntimeError: Numpy is not available`, so no array crosses between the
-  two libraries at any point. Values reach Python only through `.tolist()`.
+- **Similarity.** Cosine, computed as a matmul of L2-normalized embeddings, in row batches of
+  1000, entirely in torch. Values reach Python only through `.tolist()`, so no array
+  crosses between torch and NumPy at any point.
 - **Clustering.** The same greedy first-match rule as the MinHash pipeline: walk files in index
   order; skip one already assigned; collect every other still-unassigned file at or above
   0.9; emit the cluster if non-empty and mark all of it assigned. A file matching nothing
@@ -161,7 +164,7 @@ The paper states none of these rules; they are stated here in full.
 | ...encoding | 805s | 787s | n/a |
 | ...similarity + clustering | 119s | 4s | n/a |
 
-Runtime rows carry no verdict: the run shared its CPU with unrelated work, so a
+Runtime rows carry no verdict: wall time depends on the machine and its load, so a
 wall-clock disagreement says nothing about the method. The similarity + clustering figure is also
 not like-for-like, because the greedy loop here finds its matching indices by thresholding the row
 in torch rather than scanning `range(n)` in Python.
@@ -170,16 +173,15 @@ in torch rather than scanning `range(n)` in Python.
 
 Every published cell reproduces exactly, so there is no difference to explain.
 
-## The decode mode is the whole gap
+## Decode mode
 
-The eight undecodable files above are the entire difference between reproducing Section 5.2 and
-missing it by a cluster. One full run per mode on this corpus, both deterministic. Only one mode
-runs at a time, so the last column says which row this run measured and which is quoted from a
-previous one:
+The eight undecodable files above are the whole difference between the two decode modes. One
+full run per mode on this corpus, both deterministic. Only one mode runs at a time, so the last
+column says which row this run measured and which is quoted from a previous one:
 
 | `--decode` | Documents encoded | Clusters | Files in clusters | Source |
 |---|---:|---:|---:|---|
-| `strict` (the March behaviour) | 31,626 | 3,626 | 9,462 | **this run**, cross-checked against the recorded value: match |
+| `strict` (the population the paper states) | 31,626 | 3,626 | 9,462 | **this run**, cross-checked against the recorded value: match |
 | `replace` (the script default) | 31,634 | 3,627 | 9,466 | recorded from a prior run; not executed here |
 | Section 5.2 as published | not stated | 3,626 | 9,462 | the paper |
 
@@ -189,23 +191,23 @@ script compares that triple against its recorded `DECODE_OBSERVED` entry before 
 file. The two agree. The other mode's row cannot be checked by a run that did
 not execute it, and is marked accordingly.
 
-`strict` matches the published figures exactly; `replace` misses by +1 cluster and +4 files,
-because eight documents the March run never saw are encoded and four of them find a partner at
-0.9. The same eight files account for the TF-IDF baseline's document count, so this is one
-decode decision showing up in two baselines rather than two independent discrepancies.
+`strict` matches the published figures exactly; `replace` differs by +1 cluster and +4 files,
+because the eight documents outside the stated population are encoded and four of them find a
+partner at 0.9. The same eight files separate the TF-IDF baseline's document count from the full
+index, so one decode decision shows up in both baselines rather than two independent
+discrepancies.
 
-That does not make `strict` the better rule. It reproduces the paper because it is what the
-paper did, and what the paper did was drop eight files inside a bare `except Exception` without
-recording it. `replace` encodes everything the file index names, which is what Section 5.2's
-own prose describes. The default here is `replace` for that reason, and this file names its
-mode in the provenance table so the two can never be confused.
+`strict` is the mode that reproduces Section 5.2. `replace` is kept so a reader can measure
+what the eight files add, and this file names its mode in the provenance table so the two
+cannot be confused.
 
-The "9,462 files (29.9%)" cell is ambiguous in the paper between cluster memberships and
-distinct files. Here memberships are 9,462 and distinct files 9,462; the greedy rule
+The "9,462 files (29.9%)" cell can be read as cluster memberships or as distinct files. Here
+memberships are 9,462 and distinct files 9,462; the greedy rule
 only ever assigns an unassigned file, so the two coincide by construction, and the published
 figure is a membership count under a rule that makes it also a file count. (The MinHash side of
-the same sentence is not like this: the archived scan's 7,147 is a membership count over 7,061
-distinct files, because its LSH query can return an already-clustered file.)
+the same sentence differs: the archived scan's 7,147 is a membership count over 7,061 distinct
+files, because MinHash clusters overlap, as the caption of Table 2 states: "memberships run
+higher because clusters overlap (7,147 over 7,061 at 90%)".)
 
 ## Precision by cluster size
 
@@ -218,8 +220,8 @@ distinct files, because its LSH query can return an already-clustered file.)
 
 ## MinHash comparison row
 
-Recomputed from the archived scan under the same rules rather than re-derived with datasketch (absent
-from this interpreter) rather than quoted from a stored literal.
+Recomputed from the archived scan under the same precision and recall rules as the embedding
+row, not quoted from a stored literal. datasketch is not needed for this.
 
 | Method | Clusters | Memberships | Distinct | Rate | Recall | P@>=20 | P@>=10 |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -227,25 +229,22 @@ from this interpreter) rather than quoted from a stored literal.
 | MinHash (archived scan) | 2,622 | 7,147 | 7,061 | 22.6% | 99.7% (351/352) | 100.0% (11/11) | 78.9% (30/38) |
 | MinHash, as the paper prints it | 2,622 | 7,147 | n/a | 22.6% | 99.2% | 100.0% | 78.9% |
 
-Every MinHash cell recomputes except the recall: the published row says 99.2%,
+Every MinHash cell recomputes except the recall cell of the printed row: it says 99.2%,
 and the archived scan under this script's own recall rule gives 99.7%
 (351/352).
 
-That 99.2% is not a stale literal. It is the paper's own figure, stated five times in
-`main-acm.tex` -- in Similarity Analysis ("Recall against the Koi IOC list held constant at
-99.2% across all"), twice in Ecosystem Characterization (RQ1) ("is 99.2% at all thresholds;
-full-list recall is 98.8%" and "(hightower6eu subset: 351/354) is invariant at 99.2%"), in IOC
-Validation ("99.7% of those scanned; 99.2% against the full 354") and in Comparison with Simple
-Baselines ("Recall ($\geq$99.2%)"). The RQ1 one gives the arithmetic outright: 351/354 =
-99.15%.
+Both figures are the paper's, and Section 4.4 (IOC Validation) states how they relate: "of
+the 352 scanned, 351 appeared in clusters (99.7% of those scanned; 99.2% against the full
+354)". The 354-denominator form appears in Section 3.3 (Similarity Analysis: "Recall against
+the Koi IOC list held constant at 99.2% across all six thresholds"), in the captions of Table 2
+("is 99.2% at all thresholds; full-list recall is 98.8%") and Figure 1 ("(hightower6eu subset:
+351/354) is invariant at 99.2%"), and in Section 5.2 ("Recall ($\geq$99.2%) is omitted from
+the figure because all methods achieve near-identical values"). The 352-denominator form,
+99.7% (351/352), is the one Table 5 prints for the 3-gram MinHash row.
 
-(Quoted, not cited by line number, so the receipt does not go stale if the paper is
-re-typeset.)
-
-The two rows of the March comparison table used
-different denominators for the same numerator: 354, the hightower6eu slugs on the Koi IOC list,
-on the MinHash row, against 352, the hightower6eu files the loaded corpus actually holds, on the
-embedding row. Both rows are labelled "Recall". Recomputing the MinHash row against the same 352
-this script uses for its own recall gives 99.7%, which is why the table above now
-carries a recomputed row beside the printed one rather than the printed one alone.
+This script counts recall over the hightower6eu files the loaded corpus holds
+(352), for the embedding row and the MinHash row alike, so its recomputed MinHash
+row reads 99.7% beside the printed 99.2%. The two are the same 351
+files over different denominators, and the table above carries the recomputed row beside the
+printed one so that both denominators are visible.
 

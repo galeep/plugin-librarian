@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-"""File-level precision for the size-thresholded clusters.
+"""File-level precision within the size-thresholded clusters of the 2026-03-14 scan.
 
 Cluster-level precision in the paper counts a cluster as a true positive if it
-holds at least one file confirmed malicious. This script asks the finer
-question: within the size-thresholded sets, what share of FILES are malicious,
-and how many clusters are pure versus mixed.
+holds at least one file confirmed malicious. This script computes the finer
+figure: within the clusters of >= 20, >= 10 and >= 5 files, what share of files
+is malicious, and how many true-positive clusters are pure versus mixed.
+
+It supports one sentence of Section 4.4 (IOC Validation): "File-level
+precision, promised in Section 3.4, is 305 of 307 files (0.993) at ≥ 20; at
+≥ 10 the corresponding figure is membership-level, 557 of 682 memberships
+over 643 distinct files, 0.817 (per-cluster results are among the files
+released with the code, Appendix C)." The study rows of the output are those
+figures with their per-cluster breakdown. The cross-check section of the
+output is the computation behind the Table 4 caption in the same section:
+"Only the ≥ 20 and ≥ 10 rows reproduce from the released ground truth."
 
 Three ground truths are reported side by side:
   strict  : the 12 accounts Antiy CERT documented, read out of iocs.json by
@@ -14,45 +23,49 @@ Three ground truths are reported side by side:
   content : EXPLORATORY. study, plus any file whose text on disk contains a
             payload indicator from iocs.json payload_infrastructure or the
             literals "openclawcli" / "clawcli". It tests
-            whether a file-level marker explains the rows below that the
+            whether a file-level marker explains the rows of Table 4 that the
             account rules do not reproduce.
 
 strict and study are account rules: they attribute a file by the account segment
 of its ClawHub archive path, so files in community repositories carry no account
 and are unattributed under both. Section 3.4 of the paper states a wider rule
 than either ("Antiy CERT's 12 authors, Koi IOC slugs, or files confirmed through
-payload inspection"), which is why the reproduction of Table 4 below is partial;
+payload inspection"), which is why the reproduction of Table 4 is partial;
 the cross-check section of the output states exactly which rows reproduce.
 
 The denominator for file-level precision is ALL files in the thresholded set,
 including files inside false-positive clusters. It is the share an operator
 auto-quarantining at that cluster size would sweep up, not a rate within true
-positive clusters.
+positive clusters. Files are counted as cluster memberships, one per location
+record in the scan, so a file that sits in more than one cluster counts once per
+cluster; the paper reports the >= 10 figure as membership-level for that reason.
 
 Every run cross-checks its own cluster-level counts against Table 4 and exits
 non-zero if the >= 20 or >= 10 rows disagree under the study definition, since a
-disagreement there would mean this attribution rule is not the one the March
-procedure used. The results file is written before that check, so a failing run
+disagreement there would mean this attribution rule is not the one behind
+Table 4. The results file is written before that check, so a failing run
 still leaves its output on disk for inspection; trust the exit status, not the
 presence of the file.
 
+Inputs: `scan_20260314_threshold90_skillonly.json` beside this script and
+`paper/iocs.json`, both read for every column. LIBRARIAN_CORPUS must name the
+corpus snapshot recorded in `paper/supplementary/repository-commits.md`; it is
+read only by the exploratory `content` rule, which looks up each file's text at
+`$LIBRARIAN_CORPUS/<marketplace>/<path>`. The precision figures never touch the
+filesystem. main() refuses to run without a corpus directory, because with none
+every file would be counted as unreadable and the content column would be a column
+of quiet zeros; importing the module needs no corpus.
 
-Inputs: `scan_20260314_threshold90_skillonly.json` and `paper/iocs.json`, both read for
-every column. LIBRARIAN_CORPUS is OPTIONAL and is used only for the exploratory
-`content` rule, which reads file text from the pinned March corpus; with it unset every
-file reports as unresolved in that column and the output says so. The precision figures
-never touch the filesystem.
-
-Output: `file-level-precision-<UTC date>.md` beside this script, or the full path in
-SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's file.
+Output: `file-level-precision-YYYYMMDD.md` (today's UTC date) beside this script, or the
+full path in SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's file.
 
 `account_of`, `slug_of`, `payload_indicators`, `ContentMarker`, `WEAK_INDICATOR`,
 `SCAFFOLD_TYPE`, `TABLE4` and `CLAWHUB` are imported by `table4_triage_record.py`,
 `rq3_hit_value.py`, `exact_hash_baseline.py`, `backup_slug_check.py` and
-`supplementary_data_tables.py`, so the attribution rule cannot drift between them.
+`supplementary_data_tables.py`, so the attribution rule is shared by all of them.
 
-Run:
-  LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS python paper/sources/scans/file_level_precision.py
+Run, with LIBRARIAN_CORPUS set:
+  python paper/sources/scans/file_level_precision.py
 """
 import datetime, json, os, sys
 from pathlib import Path
@@ -61,7 +74,7 @@ HERE = Path(__file__).resolve().parent
 SCAN = HERE / "scan_20260314_threshold90_skillonly.json"
 IOCS = HERE.parents[1] / "iocs.json"
 # The default output name carries today's UTC date, so a run on another day cannot overwrite
-# a tracked file; SCAN_RESULTS_OUT (a full path) overrides it.
+# the file shipped in the repository; SCAN_RESULTS_OUT (a full path) overrides it.
 _DEFAULT_OUT_NAME = "file-level-precision-{}.md".format(
     datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d"))
 OUT = Path(os.environ["SCAN_RESULTS_OUT"]) if os.environ.get("SCAN_RESULTS_OUT") \
@@ -69,54 +82,53 @@ OUT = Path(os.environ["SCAN_RESULTS_OUT"]) if os.environ.get("SCAN_RESULTS_OUT")
 def require_corpus():
     """Corpus root from LIBRARIAN_CORPUS, or exit; there is no default.
 
-    DESIGN RATIONALE: a fallback to a checkout on the author's machine hands a
-    reproducer plausible numbers computed against the wrong tree. No default is
-    right, so there is none, and a missing or wrong value stops the run.
+    DESIGN RATIONALE: a fallback to a default checkout path hands a reproducer
+    plausible numbers computed against the wrong tree. No default is right, so
+    there is none, and a missing or wrong value stops the run.
     """
     value = os.environ.get("LIBRARIAN_CORPUS")
     if not value:
-        sys.exit("LIBRARIAN_CORPUS is unset; set it to the pinned March snapshot "
-                 "(see paper/supplementary/repository-commits.md) and rerun.")
+        sys.exit("LIBRARIAN_CORPUS is unset; set it to the corpus snapshot recorded in "
+                 "paper/supplementary/repository-commits.md and rerun.")
     root = os.path.expanduser(value)
     if not os.path.isdir(root):
-        sys.exit(f"LIBRARIAN_CORPUS={value} is not a directory; set it to the pinned "
-                 "March snapshot (see paper/supplementary/repository-commits.md) and rerun.")
+        sys.exit(f"LIBRARIAN_CORPUS={value} is not a directory; set it to the corpus "
+                 "snapshot recorded in paper/supplementary/repository-commits.md and rerun.")
     return root
 
 
 # Corpus root for the exploratory content marker only. The precision figures read
 # the archived scan and iocs.json and never touch the filesystem, so importing this
 # module must not require a corpus: MARKETPLACE_ROOT is None when LIBRARIAN_CORPUS
-# is unset, every file then reports as unresolved, and main() says so. There is no
-# path default, because a fallback to a live checkout computes the content column
-# against a tree that has drifted past the March snapshot.
+# is unset, every file is then counted as unreadable, and main() refuses to run. There
+# is no path default, because a fallback to a live checkout computes the content
+# column against a tree other than the recorded snapshot.
 _corpus_env = os.environ.get("LIBRARIAN_CORPUS")
 MARKETPLACE_ROOT = Path(os.path.expanduser(_corpus_env)) if _corpus_env else None
 THRESHOLDS = (20, 10, 5)
 CLAWHUB = "clawhub-archive"
 
-# Cluster-level true positives as published in Table 4 of the paper
-# (paper/main-acm.tex, \label{tab:precision-recall}): threshold -> (TP, clusters).
-# None keys the table's "All clusters" row. Reproduced here so the cross-check is
-# recomputed on every run rather than done by eye once.
+# Cluster-level true positives as published in Table 4 of the paper (Section 4.4,
+# \label{tab:precision-recall}): threshold -> (TP, clusters). None keys the
+# table's "All clusters" row. Reproduced here so the cross-check is recomputed on
+# every run rather than done by eye once.
 TABLE4 = {20: (11, 11), 15: (23, 23), 10: (30, 38), 5: (60, 163), None: (104, 2622)}
 
 # Rows Table 4 carries that THRESHOLDS does not, reported for context in the
 # cross-check so a reader does not conclude only the >= 5 row fails to reproduce.
 CONTEXT_ROWS = (15, None)
 
-# The "known malware authors" list in the March working notes behind Table 4,
-# which are not part of this artifact. Carried as a candidate ground truth
-# because the notes reach 60/163 at >= 5 with it, which this script does not
-# reproduce.
+# The "known malware authors" list carried by the March working notes, which are
+# not part of this artifact. Included as a candidate ground truth because those
+# notes reach 60/163 at >= 5 with it, which this script does not reproduce.
 MARCH_ACCOUNTS = frozenset({
     "hightower6eu", "sakaen736jih", "thiagoruss0", "zaycv", "jordanprater",
     "stveenli", "anisafifi", "timclawbot", "kenblive", "mupengi-bot",
 })
 
-# Literals named in the March working notes, where a content search
-# (mdfind) across the archive broadened the author list. Everything else in the
-# content marker comes from iocs.json.
+# Two payload-name literals that iocs.json does not carry as indicators. They come
+# from the March working notes, which are not part of this artifact. Everything
+# else in the content marker comes from iocs.json.
 EXTRA_LITERALS = ("openclawcli", "clawcli")
 
 # Indicators shorter than this are dropped: they are substrings common enough to
@@ -138,19 +150,19 @@ EXCLUDED_CATEGORIES = ("ip_addresses", "file_hashes", "social_engineering_patter
 
 # The scan tags a cluster 'scaffold' when it is internal to one marketplace with
 # >= 5 files and average similarity >= 0.98 (librarian/cli.py:1582-1585). The
-# PUBLISHED Table 4 carries a Scaffold row reading "44/44" (Section 4.4) and the
-# scan holds exactly 44 such clusters, so the March triage credited every scaffold
-# cluster and the tag is a candidate for the marker the account rules do not
-# reproduce. DESIGN RATIONALE for reporting it separately rather than folding it
-# into a ground truth: the tag is assigned by the same clustering pipeline whose
-# output is being scored, so any rule that ORs it in measures how closely the March
+# published Table 4 carries a Scaffold row reading "44/44" (Section 4.4) and the
+# scan holds exactly 44 such clusters, so the triage behind Table 4 credited every
+# scaffold cluster and the tag is a candidate for the marker the account rules do
+# not reproduce. DESIGN RATIONALE for reporting it separately rather than folding
+# it into a ground truth: the tag is assigned by the same clustering pipeline whose
+# output is being evaluated, so any rule that ORs it in measures how closely that
 # triage tracked the tool's own structural tag. Rows built on it are
 # reconstructions, not precision figures.
 SCAFFOLD_TYPE = "scaffold"
 
 # Weakest of the indicators: iocs.json records clawdhub.com as a typosquat with
 # status "unknown", not as a confirmed payload host, and a file naming it is as
-# likely to be documenting the real clawdhub CLI as delivering anything. Counted
+# likely to be documenting the legitimate clawdhub CLI as delivering anything. Counted
 # separately at every threshold so a reader can subtract it.
 WEAK_INDICATOR = "clawdhub.com"
 
@@ -273,15 +285,15 @@ def weak_driver_counts(clusters, marker, is_study):
 def candidate_table(clusters, candidates, rows):
     """Cluster-level TP for each candidate ground truth against Table 4's rows."""
     lines = ["## Candidate ground truths against Table 4", "",
-             "Every rule reachable from this repository, scored on Table 4's own rows."
+             "Every rule reachable from this repository, evaluated on Table 4's own rows."
              " `all` is Table 4's \"All clusters\" row.", "",
              "**The scaffold rows are not precision figures.** `scaffold` is a tag the"
              " clustering pipeline assigns to its own output (an internal, single-marketplace"
              " cluster of >= 5 files with average similarity >= 0.98,"
-             " `librarian/cli.py:1582-1585`), so a rule that ORs it in is scored partly"
-             " against the tool being evaluated. Those rows measure how closely the March"
-             " triage tracked the tool's structural tag; they are reconstructions of the"
-             " ground truth, not measurements of precision.", "",
+             " `librarian/cli.py:1582-1585`), so a rule that ORs it in is measured partly"
+             " against the tool being evaluated. Those rows measure how closely the triage"
+             " behind Table 4 tracked the tool's structural tag; they are reconstructions of"
+             " the ground truth, not measurements of precision.", "",
              "| candidate ground truth | " + " | ".join(
                  f">= {t}" if t is not None else "all" for t in rows) + " |",
              "|:--|" + "---:|" * len(rows)]
@@ -341,48 +353,48 @@ def cross_check(measured, context, marker_reproduces, columns):
     if disagree:
         lines += [
             "**The rows marked NO do not reproduce, and the marker that would close the gap"
-            " is unidentified.** What has been ruled out:", "",
-            "- Koi's 341 IOC slugs are not the missing marker. The March working notes, which are"
-            " not part of this artifact, report"
-            " 337 of the 341 twice and the two readings differ: one gives 337/341 as"
-            " archive-wide recall, the other ties the same 337/341 to the cross-reference"
-            " that identified `hightower6eu`. The argument holds either way. Under the second"
-            " reading those files sit under an account present in every ground truth here, so"
-            " they are already credited. Under the first, slug matching is still not what"
-            " separates the columns: adding every skill slug `iocs.json` does carry leaves the"
-            " >= 5 count at 41/163, as the candidate table above shows.",
+            " is unidentified.** The candidate table above rules out three explanations:", "",
+            "- Koi's 341 IOC slugs are not the missing marker. Koi's list is not in this"
+            " repository; Section 4.4 reports that 337 of the 341 resided in the archive and"
+            " that all 337 appeared in clusters. `hightower6eu`, the single author whose"
+            " 354-slug IOC subset the paper's threshold and ablation tables use, is present in"
+            " every ground truth here, so its clustered files are already credited. Slug"
+            " matching is not what separates the columns either: adding every skill slug"
+            " `iocs.json` does carry leaves the >= 5 count at 41/163, as the candidate table"
+            " above shows.",
             "- The identity of the account list is not the variable either. The March working"
-            " notes report 60/163 at >= 5 from a 10-account list that this script scores"
-            " at 41/163 on the same scan; every account list tried lands between 37 and 41.",
+            " notes, which are not part of this artifact, reach 60/163 at >= 5 from a"
+            " 10-account list; this script scores that list at 41/163 on the same scan, and"
+            " every account list in the candidate table lands between 37 and 41.",
             "- The remaining clause of Section 3.4, files confirmed through payload"
             " inspection, is the unaccounted-for one. The `content` column above tests it"
             " with the payload indicators iocs.json does carry, and "
             + ("closes the gap." if marker_reproduces else
-               f"does not close it: over study it adds {gained}, and as the header explains"
+               f"does not close it: over study it adds {gained}, and as the Definitions section explains"
                " the >= 5 gain is a benign mention rather than a payload."), "",
             "**Closest mechanical reconstruction: account attribution OR the scan's own"
             " `scaffold` cluster type.** The scan tags 44 clusters `scaffold` (internal to one"
             " marketplace, >= 5 files, average similarity >= 0.98) and the published Table 4"
-            " carries a Scaffold row reading \"44/44\" (Section 4.4), so the March triage"
-            " credited every scaffold cluster. `study OR scaffold` reproduces the >= 20 and"
-            " >= 15 rows exactly and comes within one cluster at >= 10 (31 against 30) and one"
-            " at >= 5 (59 against 60).",
+            " carries a Scaffold row reading \"44/44\" (Section 4.4), so the triage behind"
+            " Table 4 credited every scaffold cluster. `study OR scaffold` reproduces the"
+            " >= 20 and >= 15 rows exactly and comes within one cluster at >= 10 (31 against"
+            " 30) and one at >= 5 (59 against 60).",
             "",
-            "On the >= 10 row the sources disagree with each other, not only with this script."
-            " The March analysis carried 32/38; the published table reads 30/38. Neither the"
-            " March analysis nor its supporting notes is part of this artifact. The"
-            " scaffold rule's 31"
-            " sits between the two. The >= 15 and >= 5 rows come from a March hand triage"
-            " whose per-cluster decisions were never archived; the paper prints them"
-            " unchanged, and this script does not reproduce them. Differences of one cluster"
-            " are what hand triage under Section 3.4's third clause would produce.",
+            "The >= 10 row reproduces exactly under study (30/38); the scaffold rule's 31"
+            " overshoots it by one. The Table 4 caption states the boundary of what the"
+            " released ground truth reproduces: \"Only the ≥ 20 and ≥ 10 rows reproduce from"
+            " the released ground truth.\" The >= 15 and >= 5 rows rest on per-cluster triage"
+            " decisions that the released ground truth does not carry, so this script does not"
+            " reproduce them. Differences of one cluster are what hand triage under Section"
+            " 3.4's third clause would produce.",
             "",
             "**This reconstruction is circular, and the 44/44 row is where the circularity is"
             " clearest.** The `scaffold` tag is assigned by the same clustering pipeline whose"
             " output Table 4 scores (`librarian/cli.py:1582-1585`). That the published table"
             " credits all 44 scaffold clusters is at once the strongest evidence that the tag"
-            " drove the March triage and the plainest statement that the triage followed the"
-            " tool's own structural signal. So 59/163 is a reconstruction of the ground truth,"
+            " drove the triage and the plainest statement that the triage followed the"
+            " tool's own structural signal; Section 3.4 states this circularity limitation for"
+            " the ground truth as a whole. So 59/163 is a reconstruction of the ground truth,"
             " not a precision figure, and neither it nor any other scaffold row belongs in a"
             " precision claim. The scaffold rule is the closest mechanical reconstruction"
             " available, not an exact one: no rule in this repository reproduces every row, so"
@@ -431,9 +443,23 @@ def preamble(antiy, study, indicators, marker, clusters, is_study, content_all):
     return [
         "# File-level precision within size-thresholded clusters (90% scan, 2026-03-14)",
         "",
-        f"Input scan: `{SCAN.name}` (the 90% Jaccard, SKILL.md-only scan; the sibling"
-        f" `_original` file of the same date is not part of this artifact and is not used here)."
-        f" Ground truth: `{IOCS.relative_to(IOCS.parents[1])}`. Generated by `{Path(__file__).name}`.",
+        f"Input scan: `{SCAN.name}` (the 90% Jaccard, SKILL.md-only scan)."
+        f" Ground truth: `{IOCS.relative_to(IOCS.parents[1])}`. Generated by `{Path(__file__).name}`,"
+        " run with LIBRARIAN_CORPUS set: `python paper/sources/scans/file_level_precision.py`.",
+        "",
+        "This file reports, for the clusters of the scan with >= 20, >= 10 and >= 5 files, the"
+        " share of files that are malicious under three ground truths, the cluster-level true"
+        " positives each ground truth yields, and how many of those clusters are pure versus"
+        " mixed. It supports one sentence of Section 4.4 (IOC Validation): \"File-level"
+        " precision, promised in Section 3.4, is 305 of 307 files (0.993) at ≥ 20; at ≥ 10"
+        " the corresponding figure is membership-level, 557 of 682 memberships over 643"
+        " distinct files, 0.817 (per-cluster results are among the files released with the"
+        " code, Appendix C).\" The study rows below are those figures with their per-cluster"
+        " breakdown. The cross-check section is the computation behind the Table 4 caption in"
+        " the same section: \"Only the ≥ 20 and ≥ 10 rows reproduce from the released ground"
+        " truth.\" Section 3.4 (Ground Truth and Validation) defines the two levels: \"We report"
+        " precision at both cluster level (fraction of clusters containing confirmed malicious"
+        " content) and file level (fraction of clustered files confirmed malicious).\"",
         "",
         "## Definitions",
         "",
@@ -449,7 +475,7 @@ def preamble(antiy, study, indicators, marker, clusters, is_study, content_all):
         " literals `openclawcli` and `clawcli`. Files are read from"
         " `$LIBRARIAN_CORPUS/<marketplace>/<path>`; a file that"
         " does not resolve there is counted as carrying no indicator and reported as"
-        " unresolved.",
+        " unreadable.",
         f"  The other three categories are excluded. `ip_addresses` and `file_hashes` are"
         " inert: adding them changes no figure in this file. `social_engineering_patterns` is"
         " excluded because it is not inert and would wreck the marker: its ZIP-password"
@@ -486,7 +512,10 @@ def preamble(antiy, study, indicators, marker, clusters, is_study, content_all):
         " set, including the files inside false-positive clusters. It is not a rate within"
         " true-positive clusters: at >= 10 the divisor 682 is the file count of all 38"
         " clusters, not of the 30 true positives. Read it as the share an operator"
-        " auto-quarantining every cluster at that size would sweep up. At >= 20 the two"
+        " auto-quarantining every cluster at that size would sweep up. Files are counted as"
+        " cluster memberships, one per location record in the scan, so a file that sits in"
+        " more than one cluster counts once per cluster; the paper reports the >= 10 figure"
+        " as membership-level for that reason. At >= 20 the two"
         " readings coincide, but only because all 11 clusters there are true positives.",
         "",
         f"Files the content marker could not read: {unresolved_in(clusters, marker)} of"
@@ -502,8 +531,9 @@ def main() -> int:
     # Without this the content marker reads nothing, every file lands in
     # unresolved, and the run still exits 0 with a column of quiet zeros.
     if MARKETPLACE_ROOT is None or not MARKETPLACE_ROOT.is_dir():
-        print(f"no corpus at {MARKETPLACE_ROOT}; set LIBRARIAN_CORPUS to the pinned March snapshot (see paper/supplementary/repository-commits.md). The content marker "
-              f"cannot read any file, so its column would be silently empty", file=sys.stderr)
+        print(f"no corpus at {MARKETPLACE_ROOT}; set LIBRARIAN_CORPUS to the corpus snapshot "
+              "recorded in paper/supplementary/repository-commits.md. The content marker "
+              "cannot read any file, so its column would be silently empty", file=sys.stderr)
         return 1
 
     scan = json.loads(SCAN.read_text())
@@ -599,7 +629,7 @@ def main() -> int:
                       for name, pred in tests}
             # strict implies study implies content, and all three count files, so
             # the counts are ordered; a violation would mean the ground-truth
-            # sets or the attribution rules had drifted apart.
+            # sets or the attribution rules had diverged.
             if not 0 <= counts["strict"] <= counts["study"] <= counts["content"] <= n:
                 print(f"cluster {c['cluster_id']}: expected 0 <= strict <= study <= content "
                       f"<= files, got {counts['strict']} <= {counts['study']} <= "
@@ -623,7 +653,7 @@ def main() -> int:
                 return 1
         # Cluster-level TP for every rule, including the scaffold pair that has no
         # file-level counterpart. The three shared names are cross-checked against
-        # the loop's own counts below, so the two computations cannot drift.
+        # the loop's own counts below, so the two computations cannot diverge.
         tp_all = {name: cluster_tp(big, pred) for name, pred in cluster_rules}
         for name, _ in tests:
             if tp_all[name] != tp[name]:
@@ -673,9 +703,10 @@ def main() -> int:
              + cross + body)
     OUT.write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
-    # The brief's STOP rule binds the two thresholds the paper's abstract and
-    # Section 4.3 quote, under the study definition only. A disagreement there
-    # would mean this attribution rule is not the March procedure's, which
+    # The exit status binds the two thresholds Section 4.4 quotes and the Table 4 caption names,
+    # under the study definition only; the Table 4 caption names those two rows as
+    # the ones the released ground truth reproduces. A disagreement there would
+    # mean this attribution rule is not the one behind Table 4, which
     # invalidates every number above.
     binding = [th for th, _, _ in disagree if th in (20, 10)]
     if binding:

@@ -7,7 +7,7 @@ importing this module has no side effects beyond the imports.
 
 `tilde`, `_git` and `git_head` duplicate the helpers in `order_permutation.py` rather
 than importing them, because that module imports datasketch and the embedding run does
-not require it. Keep the two copies in step.
+not need it. Keep the two copies in step.
 
 `git_head` reports the short HEAD of the checkout rooted exactly at the given
 directory, or a reason string; `model_snapshot` reports the cached Hugging Face
@@ -23,11 +23,11 @@ import subprocess
 
 # --------------------------------------------------------------------------
 # provenance helpers (copied from order_permutation.py rather than imported:
-# that module imports datasketch, which is absent from this interpreter)
+# that module imports datasketch, which the embedding run does not need)
 # --------------------------------------------------------------------------
 
 def tilde(path):
-    """Home-relative form of a path, so the artifact carries no user directory."""
+    """Home-relative form of a path, so console output carries no user directory."""
     home = os.path.expanduser("~")
     path = str(path)
     return "~" + path[len(home):] if path.startswith(home) else path
@@ -38,8 +38,7 @@ def _git(d, *args):
 
     No exception handling here on purpose. `git_head` is the only caller and it
     already turns FileNotFoundError, OSError and SubprocessError into the reason
-    strings that render into the results file, so a bare `except ...: raise` here
-    was a no-op that read as if it handled something.
+    strings that render into the results file.
     """
     r = subprocess.run(["git", "-C", str(d), *args], capture_output=True,
                        text=True, timeout=30)
@@ -76,7 +75,7 @@ def model_snapshot(name):
     """Cached Hugging Face snapshot hash for the model, or a reason string.
 
     The run is pinned with HF_HUB_OFFLINE=1, so the bytes encoded are whatever is
-    on disk here; recording the hash is what makes the encode reproducible.
+    in the local hub cache; recording the hash is what makes the encode reproducible.
     """
     root = Path(os.path.expanduser("~/.cache/huggingface/hub"))
     for owner in ("sentence-transformers", "models"):
@@ -94,9 +93,9 @@ def row(label, paper, got, fmt="{:,}", tol=0.0):
     """One comparison row.
 
     `tol` allows a rounding-width match on percentages. `tol=None` means the two
-    values are not comparable at all (the runtime rows: this machine was under
-    concurrent load), so the row shows both and marks the verdict `n/a` rather
-    than claiming a match it has not tested.
+    values are not compared at all (the runtime rows: wall time depends on the
+    machine and on what else it was running), so the row shows both and marks the
+    verdict `n/a` rather than claiming a match it has not tested.
     """
     if paper is None:
         return f"| {label} | n/a | {fmt.format(got)} | n/a |"
@@ -117,11 +116,10 @@ def render(*, PAPER, PAPER_MINHASH, DECODE_OBSERVED, DEFAULT_DECODE,
 
     DESIGN RATIONALE: this is a rendering function and nothing else. It performs no
     file reads, no clustering and no arithmetic beyond formatting and the comparisons
-    the caller has already fixed, so moving it out of `embedding_comparison.py`
-    (which was over the ~500-line house limit, roughly 180 of them this template)
-    cannot change a reported number. The keyword-only signature is the point: it
-    names exactly what the report depends on, and a missing input is a TypeError at
-    the call rather than a blank cell in the artifact.
+    the caller has already fixed, so it cannot change a reported number; keeping it in
+    its own module keeps the computation and the rendering apart. The
+    keyword-only signature names exactly what the report depends on, and a missing
+    input is a TypeError at the call rather than a blank cell in the results file.
     """
     import numpy
     import sklearn
@@ -139,6 +137,9 @@ def render(*, PAPER, PAPER_MINHASH, DECODE_OBSERVED, DEFAULT_DECODE,
     markets = sorted({e["marketplace"] for e in entries})
     n_markets = len(markets)
     heads = "\n".join(f"| `{m}` | {git_head(CORPUS / m)} |" for m in markets)
+    # Paths in the results file are repository-relative, never absolute.
+    repo_root = HERE.parents[2]
+    iocs_rel = IOCS.relative_to(repo_root).as_posix()
     cmp_rows = "\n".join([
         row("Clusters", PAPER["clusters"], len(clusters)),
         row("Files in clusters (memberships)", PAPER["files_in_clusters"], memberships),
@@ -178,7 +179,7 @@ def render(*, PAPER, PAPER_MINHASH, DECODE_OBSERVED, DEFAULT_DECODE,
         ])
         # DESIGN RATIONALE: "the difference is confined to small clusters" is only
         # true when the >= 10 and >= 20 buckets and recall all reproduce. Asserting
-        # it unconditionally would put a false claim in the artifact on any run
+        # it unconditionally would put a false claim in the results file on any run
         # where they do not, so the sentence is gated on the numbers themselves.
         recall_ok = abs(PAPER["recall"] - recall) <= 0.05
         if big_ok and recall_ok:
@@ -203,43 +204,37 @@ def render(*, PAPER, PAPER_MINHASH, DECODE_OBSERVED, DEFAULT_DECODE,
 
 {where}
 
-Four candidate causes, none of them checkable today, in rough order of how much of a
-{delta:+,d}-cluster shift each could plausibly produce:
+Candidate causes of a {delta:+,d}-cluster shift, in rough order of how much of it each
+could produce:
 
-1. **A different file list.** The original run read a local index file, a separate
-   artifact from the archived scan used here, and it does not survive. If its
-   `file_index` differed from the scan's by even a handful of entries, the membership
-   counts move directly. This cannot be checked.
-2. **An unpinned corpus.** The original run read a live checkout on 2026-03-15, a day
-   after the scan was generated, not a snapshot pinned to the scan's SHAs. This run
-   reads the pinned snapshot.
-3. **Package versions.** Nothing records what was installed in March. This interpreter now has
-   sentence-transformers {sentence_transformers.__version__} and torch {torch.__version__}; a
-   change in the tokenizer, the pooling path or a default dtype between March's versions and
-   these shifts borderline cosines.
-4. **Float arithmetic.** The March code normalised and multiplied in float32 NumPy; this run
-   does the same in float32 torch, with a different summation order inside the matmul. A pair
-   sitting within roughly 1e-6 of 0.9 can land on the other side of the comparison, and because
-   the clustering is greedy and order-dependent, one flipped pair can cascade into a different
+1. **Package versions.** No lock file pins them. This run used sentence-transformers
+   {sentence_transformers.__version__} and torch {torch.__version__}; a change in the
+   tokenizer, the pooling path or a default dtype between two versions shifts borderline
+   cosines.
+2. **Float arithmetic.** Normalization and the matmul run in float32, and the summation
+   order inside the matmul differs between libraries and builds. A pair sitting within
+   roughly 1e-6 of 0.9 can land on the other side of the comparison, and because the
+   clustering is greedy and order-dependent, one flipped pair can cascade into a different
    cluster count.
+3. **A corpus not at the recorded commits.** The marketplace HEAD table above must match
+   `paper/supplementary/repository-commits.md`; a checkout at a different commit changes
+   file contents and therefore memberships.
+4. **A different file list.** The file list is the archived scan's `file_index`; a run that
+   indexes the corpus afresh can differ from it by a handful of entries, and the membership
+   counts move directly.
 
-Causes 1 and 2 are corpus-side, 3 and 4 arithmetic-side, and nothing available here separates
-them. The paper was not edited on the strength of this difference; that decision is the
-author's."""
+Causes 1 and 2 are arithmetic-side, 3 and 4 corpus-side; the provenance table above is
+what separates them."""
     size_rows = "\n".join(
         f"| >= {sz} | {p['count']} | {p['malicious']} | "
         + (f"{p['precision']:.1f}% |" if p["precision"] is not None else "n/a |")
         for sz, p in sorted(precision.items()))
-    # DESIGN RATIONALE: the command block used to print no flags, so the one
-    # copy-and-run path in this file reproduced the script's DEFAULTS rather than
-    # the run that wrote the file. Any flag whose value is not the default is
-    # interpolated here; a flag added later must be added here too, or this file
-    # will again print a command that contradicts its own numbers.
     # Decode-mode rows. The row for the mode this run executed carries THIS RUN's
     # measured triple and the verdict of the cross-check against DECODE_OBSERVED; the
-    # other row is the recorded value from a prior run and is labelled as such, because
+    # other row is the recorded value from a prior run and is labeled as such, because
     # nothing in this run can confirm it.
-    _mode_label = {"strict": "the March behaviour", "replace": "the script default"}
+    _mode_label = {"strict": "the population the paper states",
+                   "replace": "the script default"}
     decode_rows = []
     for mode in ("strict", "replace"):
         rec = DECODE_OBSERVED.get(mode)
@@ -247,13 +242,18 @@ author's."""
             n, c, m = decode_observed_run
             src = ("**this run**, cross-checked against the recorded value: match"
                    if decode_check_ok else
-                   f"**this run** -- **MISMATCH** against the recorded "
+                   f"**this run**, **MISMATCH** against the recorded "
                    f"{tuple(rec) if rec else None}; see the warning on stderr")
         else:
             n, c, m = rec if rec else (0, 0, 0)
             src = "recorded from a prior run; not executed here"
         decode_rows.append(f"| `{mode}` ({_mode_label[mode]}) | {n:,} | {c:,} | {m:,} | {src} |")
     decode_rows = "\n".join(decode_rows)
+    # DESIGN RATIONALE: the command block interpolates every flag whose value is not
+    # the default, so the one copy-and-run path in this file reproduces the run that
+    # wrote the file rather than the script's defaults. A flag added later must be
+    # added here too, or this file will print a command that contradicts its own
+    # numbers.
     flags = [f"--decode {decode}"] if decode != DEFAULT_DECODE else []
     flag_block = (" \\\n  " + " ".join(flags)) if flags else ""
     skip_rows = " | ".join(str(skipped[k]) for k in
@@ -273,12 +273,16 @@ author's."""
 
     return f"""# Sentence-embedding baseline (Section 5.2 recompute)
 
-Recompute of the Sentence-BERT baseline in Section 5.2 ("Embeddings produced 3,626
-clusters covering 9,462 files") and Figure 3,
-which the paper reports with no archived results file. The original run read a local
-index file and an unpinned checkout, neither of which survives, so its figures had no
-reproducible artifact;
-this run reads the archived scan's `file_index` against a pinned March corpus snapshot.
+This file reports a recompute of the sentence-embedding baseline that Section 5.2
+(Comparison with Simple Baselines) sets beside MinHash and TF-IDF, and that Figure 3
+plots. It supports these Section 5.2 sentences: "We encoded every file that decodes as
+UTF-8 (31,626 of 31,634) with the sentence-transformers model all-MiniLM-L6-v2
+(384-dimensional embeddings, first 2,048 characters per file) and clustered at 0.9 cosine
+similarity. Embeddings produced 3,626 clusters covering 9,462 files (29.9%) with 99.7%
+recall. Precision fell between TF-IDF and MinHash: P@$\\geq$20 was 92.9% (13/14) and
+P@$\\geq$10 was 62.8% (27/43). Runtime was 924 s (805 s encoding, 119 s clustering),
+three times slower than MinHash." The run reads the archived scan's `file_index` against
+the pinned corpus snapshot and writes every recomputed figure beside the published one.
 
 ## Provenance
 
@@ -294,22 +298,22 @@ this run reads the archived scan's `file_index` against a pinned March corpus sn
 | Model snapshot | `{model_snapshot(MODEL_NAME)}` |
 | `HF_HUB_OFFLINE` | `{os.environ.get("HF_HUB_OFFLINE", "unset")}` |
 | Decode mode | `--decode {decode}` |
-| Corpus root | `{tilde(CORPUS)}` |
+| Corpus root | `$LIBRARIAN_CORPUS` |
 | Scan | `{SCAN.name}`, `generated_at` {scan["metadata"]["generated_at"]} |
-| Ground truth | `{tilde(IOCS)}`, `clawhub_authors` ({len(mal_authors)} accounts) |
-| Repository HEAD | {git_head(HERE.parents[2])} |
+| Ground truth | `{iocs_rel}`, `clawhub_authors` ({len(mal_authors)} accounts) |
+| Repository HEAD | {git_head(repo_root)} |
 | Run at | {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")} |
 
-The published run used the package versions in the table above; any environment with a
-working `sentence-transformers` reproduces it. Nothing pins those versions: there is no
-lock file, and no results file from March records them.
+The package versions in the table are the ones this run used, and the published figures
+reproduce under them. No lock file pins them, so a rerun records its own.
 
-Command, as run. Every non-default flag is interpolated from the run itself, so copying this
-block out and running it reproduces the numbers below rather than the script's defaults:
+Command, as run, with LIBRARIAN_CORPUS set. Every non-default flag is interpolated from
+the run itself, so copying this block out and running it reproduces the numbers below
+rather than the script's defaults:
 
 ```
-LIBRARIAN_CORPUS={tilde(CORPUS)} HF_HUB_OFFLINE=1 TOKENIZERS_PARALLELISM=false \\
-  {tilde(sys.executable)} \\
+HF_HUB_OFFLINE=1 TOKENIZERS_PARALLELISM=false \\
+  python \\
   paper/sources/scans/{SCRIPT_NAME}{flag_block}
 ```
 
@@ -324,8 +328,7 @@ LIBRARIAN_CORPUS={tilde(CORPUS)} HF_HUB_OFFLINE=1 TOKENIZERS_PARALLELISM=false \
 
 The paper reports one 924 s figure split 805 s encode / 119 s cluster. Its "cluster" number
 covers similarity and clustering together, so compare it against the sum of the last two
-rows ({t_sim + t_clu:.1f} s). Runtimes here are not comparable to the published figures:
-the run shared its CPU with unrelated work.
+rows ({t_sim + t_clu:.1f} s). Runtimes here are not comparable to the published figures: wall time depends on the machine and its load.
 
 Snapshot the numbers above and below were computed from. Compare against
 `paper/supplementary/repository-commits.md`. Listed here are the {n_markets} marketplaces that
@@ -344,23 +347,23 @@ are not read by this script and so are not pinned by it.
 
 ## Rules
 
-The paper states none of these rules; they are stated here in full.
+Section 5.2 gives the model, the population ("every file that decodes as UTF-8 (31,626 of
+31,634)"), the 2,048-character truncation, the 0.9 cosine threshold and the greedy
+first-match rule. The remaining rules are stated here in full.
 
 - **Encoded unit.** The first {TRUNCATE_CHARS} characters of each file, decoded as UTF-8 with
   `errors="{decode}"`, encoded by `{MODEL_NAME}` on CPU in batches of {ENCODE_BATCH}. Files under
   {MIN_CHARS} characters are skipped ({skipped["short"]} here).
-- **Decoding.** Eight indexed files are not valid UTF-8, and whether they enter the corpus is
-  what separates the published document count from the full index. `--decode strict` drops
-  them, which is the population behind the published figures, and names the files it drops;
-  `--decode replace` (the default) substitutes U+FFFD and encodes everything the index names.
-  The two give different document counts, so the mode is in the provenance table above.
+- **Decoding.** Eight indexed files are not valid UTF-8. `--decode strict` skips them, which
+  gives the population Section 5.2 states, and names the files it drops; `--decode replace`
+  (the script default) substitutes U+FFFD and encodes everything the index names. The two
+  give different document counts, so the mode is in the provenance table above.
 - **File list.** The archived scan's `file_index`, resolved as `$LIBRARIAN_CORPUS/<marketplace>/<path>`,
   mirroring `order_permutation.load_files`. A bare `$LIBRARIAN_CORPUS/<path>` fallback is not used, so a
   path that does not resolve is a skip.
-- **Similarity.** Cosine, computed as a matmul of L2-normalised embeddings, in row batches of
-  {SIM_BATCH}. Entirely in torch: torch {torch.__version__} here was built against NumPy 1.x and
-  `Tensor.numpy()` raises `RuntimeError: Numpy is not available`, so no array crosses between the
-  two libraries at any point. Values reach Python only through `.tolist()`.
+- **Similarity.** Cosine, computed as a matmul of L2-normalized embeddings, in row batches of
+  {SIM_BATCH}, entirely in torch. Values reach Python only through `.tolist()`, so no array
+  crosses between torch and NumPy at any point.
 - **Clustering.** The same greedy first-match rule as the MinHash pipeline: walk files in index
   order; skip one already assigned; collect every other still-unassigned file at or above
   {THRESHOLD}; emit the cluster if non-empty and mark all of it assigned. A file matching nothing
@@ -384,7 +387,7 @@ The paper states none of these rules; they are stated here in full.
 |---|---:|---:|:--:|
 {cmp_rows}
 
-Runtime rows carry no verdict: the run shared its CPU with unrelated work, so a
+Runtime rows carry no verdict: wall time depends on the machine and its load, so a
 wall-clock disagreement says nothing about the method. The similarity + clustering figure is also
 not like-for-like, because the greedy loop here finds its matching indices by thresholding the row
 in torch rather than scanning `range(n)` in Python.
@@ -393,12 +396,11 @@ in torch rather than scanning `range(n)` in Python.
 
 {diff_section}
 
-## The decode mode is the whole gap
+## Decode mode
 
-The eight undecodable files above are the entire difference between reproducing Section 5.2 and
-missing it by a cluster. One full run per mode on this corpus, both deterministic. Only one mode
-runs at a time, so the last column says which row this run measured and which is quoted from a
-previous one:
+The eight undecodable files above are the whole difference between the two decode modes. One
+full run per mode on this corpus, both deterministic. Only one mode runs at a time, so the last
+column says which row this run measured and which is quoted from a previous one:
 
 | `--decode` | Documents encoded | Clusters | Files in clusters | Source |
 |---|---:|---:|---:|---|
@@ -411,23 +413,23 @@ script compares that triple against its recorded `DECODE_OBSERVED` entry before 
 file. {"The two agree." if decode_check_ok else "**They do not agree.** The run exited non-zero and warned on stderr; this file was written anyway so the mismatch can be read, so do not quote its numbers until it is explained."} The other mode's row cannot be checked by a run that did
 not execute it, and is marked accordingly.
 
-`strict` matches the published figures exactly; `replace` misses by +1 cluster and +4 files,
-because eight documents the March run never saw are encoded and four of them find a partner at
-0.9. The same eight files account for the TF-IDF baseline's document count, so this is one
-decode decision showing up in two baselines rather than two independent discrepancies.
+`strict` matches the published figures exactly; `replace` differs by +1 cluster and +4 files,
+because the eight documents outside the stated population are encoded and four of them find a
+partner at 0.9. The same eight files separate the TF-IDF baseline's document count from the full
+index, so one decode decision shows up in both baselines rather than two independent
+discrepancies.
 
-That does not make `strict` the better rule. It reproduces the paper because it is what the
-paper did, and what the paper did was drop eight files inside a bare `except Exception` without
-recording it. `replace` encodes everything the file index names, which is what Section 5.2's
-own prose describes. The default here is `replace` for that reason, and this file names its
-mode in the provenance table so the two can never be confused.
+`strict` is the mode that reproduces Section 5.2. `replace` is kept so a reader can measure
+what the eight files add, and this file names its mode in the provenance table so the two
+cannot be confused.
 
-The "9,462 files (29.9%)" cell is ambiguous in the paper between cluster memberships and
-distinct files. Here memberships are {memberships:,} and distinct files {distinct:,}; the greedy rule
+The "9,462 files (29.9%)" cell can be read as cluster memberships or as distinct files. Here
+memberships are {memberships:,} and distinct files {distinct:,}; the greedy rule
 only ever assigns an unassigned file, so the two coincide by construction, and the published
 figure is a membership count under a rule that makes it also a file count. (The MinHash side of
-the same sentence is not like this: the archived scan's 7,147 is a membership count over 7,061
-distinct files, because its LSH query can return an already-clustered file.)
+the same sentence differs: the archived scan's 7,147 is a membership count over 7,061 distinct
+files, because MinHash clusters overlap, as the caption of Table 2 states: "memberships run
+higher because clusters overlap (7,147 over 7,061 at 90%)".)
 
 ## Precision by cluster size
 
@@ -437,8 +439,8 @@ distinct files, because its LSH query can return an already-clustered file.)
 
 ## MinHash comparison row
 
-Recomputed from the archived scan under the same rules rather than re-derived with datasketch (absent
-from this interpreter) rather than quoted from a stored literal.
+Recomputed from the archived scan under the same precision and recall rules as the embedding
+row, not quoted from a stored literal. datasketch is not needed for this.
 
 | Method | Clusters | Memberships | Distinct | Rate | Recall | P@>=20 | P@>=10 |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -450,26 +452,23 @@ from this interpreter) rather than quoted from a stored literal.
 | MinHash, as the paper prints it | {PAPER_MINHASH["clusters"]:,} | {PAPER_MINHASH["files_in_clusters"]:,} \
 | n/a | {PAPER_MINHASH["rate"]}% | 99.2% | {PAPER_MINHASH["p20"]}% | {PAPER_MINHASH["p10"]}% |
 
-Every MinHash cell recomputes except the recall: the published row says 99.2%,
+Every MinHash cell recomputes except the recall cell of the printed row: it says 99.2%,
 and the archived scan under this script's own recall rule gives {mh["recall"]:.1f}%
 ({mh["recall_hit"]:,}/{mh["recall_tot"]:,}).
 
-That 99.2% is not a stale literal. It is the paper's own figure, stated five times in
-`main-acm.tex` -- in Similarity Analysis ("Recall against the Koi IOC list held constant at
-99.2% across all"), twice in Ecosystem Characterization (RQ1) ("is 99.2% at all thresholds;
-full-list recall is 98.8%" and "(hightower6eu subset: 351/354) is invariant at 99.2%"), in IOC
-Validation ("99.7% of those scanned; 99.2% against the full 354") and in Comparison with Simple
-Baselines ("Recall ($\\geq$99.2%)"). The RQ1 one gives the arithmetic outright: 351/354 =
-99.15%.
+Both figures are the paper's, and Section 4.4 (IOC Validation) states how they relate: "of
+the 352 scanned, 351 appeared in clusters (99.7% of those scanned; 99.2% against the full
+354)". The 354-denominator form appears in Section 3.3 (Similarity Analysis: "Recall against
+the Koi IOC list held constant at 99.2% across all six thresholds"), in the captions of Table 2
+("is 99.2% at all thresholds; full-list recall is 98.8%") and Figure 1 ("(hightower6eu subset:
+351/354) is invariant at 99.2%"), and in Section 5.2 ("Recall ($\\geq$99.2%) is omitted from
+the figure because all methods achieve near-identical values"). The 352-denominator form,
+99.7% (351/352), is the one Table 5 prints for the 3-gram MinHash row.
 
-(Quoted, not cited by line number, so the receipt does not go stale if the paper is
-re-typeset.)
-
-The two rows of the March comparison table used
-different denominators for the same numerator: 354, the hightower6eu slugs on the Koi IOC list,
-on the MinHash row, against 352, the hightower6eu files the loaded corpus actually holds, on the
-embedding row. Both rows are labelled "Recall". Recomputing the MinHash row against the same 352
-this script uses for its own recall gives {mh["recall"]:.1f}%, which is why the table above now
-carries a recomputed row beside the printed one rather than the printed one alone.
+This script counts recall over the hightower6eu files the loaded corpus holds
+({h6_total:,}), for the embedding row and the MinHash row alike, so its recomputed MinHash
+row reads {mh["recall"]:.1f}% beside the printed 99.2%. The two are the same {mh["recall_hit"]:,}
+files over different denominators, and the table above carries the recomputed row beside the
+printed one so that both denominators are visible.
 
 """

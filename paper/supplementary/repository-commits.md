@@ -1,9 +1,27 @@
 # Repository Commit SHAs
 
-Snapshot commits used for the analysis in "Librarian Catches Thief:
-Surfacing Supply Chain Attack Campaigns via Document Similarity in an AI
-Agent Skill Registry." All repositories cloned with `git clone --depth 1`
-between 2026-01-02 and 2026-03-13.
+This file records the commit at which each repository of the corpus was
+cloned and the date of that clone. It is the commit table the paper
+refers to in Appendix C (Reproduction):
+
+> "The ClawHub archive was cloned on 2026-03-13 at commit `16c991de`, and
+> the community and curated repositories between 2026-01-02 and
+> 2026-03-13."
+
+It also supports the mirror-pair sentence of Section 4.2 (Marketplace
+Similarity Matrix):
+
+> "Each is one upstream repository cloned into the corpus under two
+> names, as the artifact's commit table records (Appendix C)."
+
+Every repository was cloned with `git clone --depth 1`. The commit SHA
+of each clone is given in full for the ClawHub archive and abbreviated
+for the others. Table 1 of the paper (Section 3.2, Dataset
+Construction) gives `SKILL.md` file counts by repository after the
+100-character minimum filter; this file gives the commits. Rebuilding
+the corpus means checking out each repository at the commit listed
+here; `reproduction-steps.md` in this directory gives the retrieval and
+scan commands for the ClawHub archive.
 
 ## Primary Archive
 
@@ -11,18 +29,17 @@ between 2026-01-02 and 2026-03-13.
 |------------|-----------|------|
 | clawhub-archive | 16c991dea171b9f4e785cb2a70dc1ae2ade83396 | 2026-03-13 |
 
-The upstream `openclaw/skills` GitHub repository was removed sometime
-before 2026-07-11. The exact snapshot above is preserved by Software
-Heritage and permanently retrievable:
+The upstream `openclaw/skills` repository has since been removed from
+GitHub (it was absent by 2026-07-11). Software Heritage preserves the
+exact snapshot listed above and serves it publicly:
 
 - Revision: `swh:1:rev:16c991dea171b9f4e785cb2a70dc1ae2ade83396`
 - Corpus tree: `swh:1:dir:0062bcb4b60e717abcccc9ee548f78957bbec93b`
 - Browse: <https://archive.softwareheritage.org/swh:1:rev:16c991dea171b9f4e785cb2a70dc1ae2ade83396>
 - Retrieval: Software Heritage vault API
-  (`/api/1/vault/flat/swh:1:dir:0062bcb4b60e717abcccc9ee548f78957bbec93b/`),
-  see the paper's Reproduction appendix.
-
-Software Heritage, above, is the public route to this snapshot.
+  (`/api/1/vault/flat/swh:1:dir:0062bcb4b60e717abcccc9ee548f78957bbec93b/`);
+  `reproduction-steps.md` gives the `curl` sequence, and Appendix C of
+  the paper cites the snapshot.
 
 ## Community Marketplace Repositories
 
@@ -65,8 +82,9 @@ Software Heritage, above, is the public route to this snapshot.
 
 ## Curated Sub-Repositories
 
-These are nested within the corpus directory as individually cloned
-repositories.
+These repositories are nested inside the corpus directory `curated/`,
+each an individually cloned repository. Table 1 of the paper counts
+their files under the single row `curated`.
 
 | Repository | Commit SHA | Date |
 |------------|-----------|------|
@@ -97,20 +115,16 @@ repositories.
 
 ## Notes
 
-- `anthropics-skills` and `anthropic-agent-skills` share the same
-  commit SHA, b0cbd3df1533b396d281a6886d5132f623393a9c: one upstream
+- `anthropics-skills` and `anthropic-agent-skills` share the commit
+  SHA b0cbd3df1533b396d281a6886d5132f623393a9c: one upstream
   repository cloned into the corpus under two directory names. Both
-  clone names are listed above, each against that shared SHA, so the
-  1.000 pair in `marketplace-similarity-matrix.md` can be checked
-  against this table rather than taken on trust.
+  clone names are listed above against that SHA, so the 1.000 pair in
+  `marketplace-similarity-matrix.md` can be checked against this
+  table.
 - `cc-marketplace` and `ananddtyagi-cc-marketplace` are the same
   repository, sharing the commit SHA
   b643305146890bda9b2e694d2c42206ae4d0a4df, and both clone names are
   listed above for the same reason.
-- `hashicorp-agent-skills` appears both as a top-level clone and
-  under `curated/`; same commit SHA.
-- `ai-research-skills-orchestra` and `ai-research-skills-zhang` share
-  the same upstream.
-- Some repositories predate the ClawHub ecosystem (competition-scout,
-  criticalthink, geoffjay-claude-plugins) and contribute few or no
-  SKILL.md files.
+- Three community repositories predate the ClawHub ecosystem
+  (competition-scout, criticalthink, geoffjay-claude-plugins) and
+  contribute few or no `SKILL.md` files.

@@ -1,29 +1,37 @@
 #!/usr/bin/env python3
-"""File-order permutation robustness for the greedy first-match clusterer.
+"""File-order permutation sensitivity of the greedy first-match clusterer.
 
-Section 3.3 (Similarity detection) reports the clustering without an order-sensitivity
-check; this supplies one. Signatures are computed once with the default datasketch
-seed, then the greedy assignment loop is run in sorted order (the baseline) and in ten
-shuffled orders. Reports cluster count, Rand index, adjusted Rand index, and the share
-of baseline clusters reproduced exactly.
+Supports this sentence in Section 3.3 (Similarity Analysis) of the paper:
+"Permuting the assignment order (10 shuffles, signatures fixed) gave adjusted
+Rand index scores of 0.982 to 0.992 over the files clustered under both
+orderings, so ordering perturbs membership only at the margin." Section 6
+(Limitations) repeats the range as "0.982 to 0.992 across orderings". Both are
+the minimum and maximum of the adjusted Rand column this script writes.
 
-Inputs. LIBRARIAN_CORPUS (required) names the pinned March corpus; see
-paper/supplementary/repository-commits.md for the SHAs. The file list is the
-`file_index` of `scan_20260314_threshold90_skillonly.json`, beside this script.
-Parameters: 0.9 LSH threshold, 128 permutations, 3-word shingles, 100-character
-minimum, K = 10 shuffles.
+Method. MinHash signatures are computed once with the default datasketch seed.
+The greedy assignment loop is then run in sorted file-index order (the baseline)
+and in K = 10 shuffled orders. For each shuffle the script reports the cluster
+count, the Rand index and adjusted Rand index against the baseline, and the
+share of baseline clusters reproduced as the identical set of files.
 
-Output: `order-permutation-<UTC date>.md` beside this script, or the full path in
-SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's file.
+Inputs. LIBRARIAN_CORPUS (required) names the root of the pinned corpus
+snapshot; paper/supplementary/repository-commits.md lists its SHAs. The file
+list is the `file_index` of `scan_20260314_threshold90_skillonly.json`, beside
+this script. Parameters: 0.9 LSH threshold, 128 permutations, 3-word shingles,
+100-character minimum, K = 10 shuffles seeded 1000 + k.
 
-`load_files`, `signatures`, `greedy`, `git_head`, `provenance`, `require_corpus` and
-`tilde` are imported by `backup_slug_check.py`, `shingle_ablation.py`,
-`tfidf_comparison.py`, `exact_hash_baseline.py` and `cluster_gap_recompute.py`, so
-those runs resolve the same file list from the same snapshot. Changing them changes
-those results too.
+Output. `order-permutation-<UTC date>.md` beside this script, or the full path
+in SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's
+file. The shipped result is `order-permutation-20260907.md`.
 
-Run:
-  LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS python paper/sources/scans/order_permutation.py
+`load_files`, `signatures`, `greedy`, `git_head`, `provenance`, `require_corpus`
+and `tilde` are imported by `backup_slug_check.py`, `shingle_ablation.py`,
+`tfidf_comparison.py`, `exact_hash_baseline.py` and `cluster_gap_recompute.py`,
+so those runs resolve the same file list from the same snapshot. Changing them
+changes those results too.
+
+Run, with LIBRARIAN_CORPUS set:
+  python paper/sources/scans/order_permutation.py
 """
 import datetime, json, math, os, random, re, subprocess, sys
 from pathlib import Path
@@ -33,21 +41,28 @@ from librarian.core import tokenize, NUM_PERM
 
 THRESHOLD = 0.9
 K = 10
+
+# The paper sentence this file supports, quoted verbatim in the results header.
+PAPER_CLAIM = ('"Permuting the assignment order (10 shuffles, signatures fixed) gave adjusted '
+               'Rand index scores of 0.982 to 0.992 over the files clustered under both '
+               'orderings, so ordering perturbs membership only at the margin."')
+
+
 def require_corpus():
     """Corpus root from LIBRARIAN_CORPUS, or exit; there is no default.
 
-    DESIGN RATIONALE: a fallback to a checkout on the author's machine hands a
-    reproducer plausible numbers computed against the wrong tree. No default is
-    right, so there is none, and a missing or wrong value stops the run.
+    DESIGN RATIONALE: a fallback to a fixed local checkout hands a reproducer
+    plausible numbers computed against the wrong tree. No default is right, so
+    there is none, and a missing or wrong value stops the run.
     """
     value = os.environ.get("LIBRARIAN_CORPUS")
     if not value:
-        sys.exit("LIBRARIAN_CORPUS is unset; set it to the pinned March snapshot "
+        sys.exit("LIBRARIAN_CORPUS is unset; set it to the pinned corpus snapshot "
                  "(see paper/supplementary/repository-commits.md) and rerun.")
     root = os.path.expanduser(value)
     if not os.path.isdir(root):
-        sys.exit(f"LIBRARIAN_CORPUS={value} is not a directory; set it to the pinned "
-                 "March snapshot (see paper/supplementary/repository-commits.md) and rerun.")
+        sys.exit(f"LIBRARIAN_CORPUS={value} is not a directory; set it to the pinned corpus "
+                 "snapshot (see paper/supplementary/repository-commits.md) and rerun.")
     return root
 
 
@@ -61,20 +76,25 @@ OUT = Path(os.environ["SCAN_RESULTS_OUT"]) if os.environ.get("SCAN_RESULTS_OUT")
     else Path(__file__).with_name(_DEFAULT_OUT_NAME)
 
 def tilde(path):
-    """Home-relative form of a path, so the artifact carries no user directory."""
+    """Home-relative form of a path, so a results file carries no user directory."""
     home = os.path.expanduser("~")
     path = str(path)
     return "~" + path[len(home):] if path.startswith(home) else path
 
 def load_files(scan):
+    """(marketplace, path) pairs from the scan's `file_index`, in index order.
+
+    The two keys together form the corpus-relative path `<marketplace>/<path>`.
+    """
     entries = scan["file_index"]
     items = entries if isinstance(entries, list) else list(entries.values())
     files = []
     for e in items:
-        files.append((e["marketplace"], e["path"]))   # adjust ONLY these two keys if Step 1 showed different names
+        files.append((e["marketplace"], e["path"]))
     return files
 
 def signatures(files):
+    """MinHash signature per file-index position, plus counts of skipped files by reason."""
     sigs = {}
     skipped = {"missing": 0, "short": 0, "empty": 0}
     for i, (market, rel) in enumerate(files):
@@ -98,6 +118,11 @@ def signatures(files):
     return sigs, skipped
 
 def greedy(lsh, sigs, order):
+    """Greedy first-match clustering in the given order (Section 3.3, cluster formation).
+
+    Each unassigned file seeds one cluster from its LSH candidates; every member
+    is then marked assigned. Minimum cluster size is 2.
+    """
     assigned, clusters = set(), []
     for i in order:
         if i in assigned:
@@ -142,7 +167,7 @@ def rand_indices(a_clusters, b_clusters):
     max_val = ((a + c) + (a + d)) / 2
     if max_val == expected:
         # Degenerate: both clusterings put every common pair the same way, so
-        # the index has no range to normalise over. Undefined, not zero --
+        # the index has no range to normalize over. Undefined, not zero:
         # returning 0.0 would read as chance-level on a perfect match.
         return ri, float("nan")
     return ri, (a - expected) / (max_val - expected)
@@ -150,12 +175,11 @@ def rand_indices(a_clusters, b_clusters):
 def self_test() -> int:
     """Check rand_indices against hand-computed pair counts before the run.
 
-    DESIGN RATIONALE: the first version of this script used E[a+b] where the
-    Hubert-Arabie form needs E[a]. That statistic saturated at 1.0000 for this
-    corpus shape and the error was invisible in the output, so the formula is
-    now pinned by a test that fails the script rather than by inspection.
-    scikit-learn is not in this venv, so the expected values are derived by
-    hand and written out below.
+    DESIGN RATIONALE: the Hubert-Arabie form needs E[a], not E[a+b]. With
+    E[a+b] the statistic saturates at 1.0000 for this corpus shape and the
+    error is invisible in the output, so the formula is pinned by a test that
+    fails the script rather than by inspection. The expected values are derived
+    by hand and written out below, so the test needs no scikit-learn.
     """
     a3 = [{0, 1, 2}, {3, 4, 5}, {6, 7, 8}]
     # Identical clusterings: a=9, b=27, c=0, d=0, n=36.
@@ -181,6 +205,9 @@ def self_test() -> int:
         return 1
     return 0
 
+# Largest percentage difference between this run's baseline and the archived scan
+# (clusters or files clustered) before the run is reported as computed over the
+# wrong corpus.
 TOLERANCE_PCT = 1.0
 
 def scan_date(scan):
@@ -264,12 +291,16 @@ def dirty_note(label, d, indexed):
             f"filesystem. The archived scan was produced under the same condition, and it affects "
             + ("no file in the scan index." if hit == 0 else f"{hit} file(s) in the scan index."))
     if unexplained:
-        note += (f" **{unexplained} of the modified files are not explained by a case collision "
-                 f"and need looking at.**")
+        note += (f" **{unexplained} of the modified files are not explained by a case collision, "
+                 f"so for those files the checkout differs from its recorded commit.**")
     return note
 
 def provenance(scan):
-    """Markdown table of the corpus snapshot every number below was computed from."""
+    """Markdown table of the corpus snapshot every number below was computed from.
+
+    The corpus root is written as the literal `$LIBRARIAN_CORPUS`, never as the
+    resolved directory, so a results file carries no local path.
+    """
     names = sorted({e["marketplace"] for e in scan["file_index"]})
     rows = [(n, git_head(CORPUS / n)) for n in names]
     # `curated` holds sub-clones rather than being one checkout itself.
@@ -279,8 +310,7 @@ def provenance(scan):
         for sub in sorted(p for p in curated.iterdir() if p.is_dir() and p.name != ".git"):
             rows.append((f"curated/{sub.name}", git_head(sub)))
             dirs[f"curated/{sub.name}"] = sub
-    lines = [f"Corpus root: `{tilde(CORPUS)}`"
-             + ("" if os.environ.get("LIBRARIAN_CORPUS") else "  (LIBRARIAN_CORPUS unset; default)"),
+    lines = ["Corpus root: `$LIBRARIAN_CORPUS`",
              "",
              "Snapshot the numbers below were computed from. Compare against "
              "`paper/supplementary/repository-commits.md`.", "",
@@ -303,15 +333,15 @@ def provenance(scan):
     return lines + [""]
 
 def baseline_comparison(scan, base):
-    """Header lines comparing this run's baseline to the archived March scan.
+    """Header lines comparing this run's baseline to the archived scan.
 
-    DESIGN RATIONALE: the baseline is only meaningful as evidence if it
-    reproduces the March file set. A silent shortfall would let a run over the
-    wrong corpus be read as the paper's clustering, so the comparison and any
-    breach of TOLERANCE_PCT are written into the results file itself rather than
-    left to whoever happens to read the console. Both the cluster delta and the
-    file delta are gated, and the breach is returned so that it can reach the
-    exit status rather than only the markdown.
+    DESIGN RATIONALE: the baseline is evidence only if it reproduces the
+    archived scan's file set. A silent shortfall would let a run over the wrong
+    corpus be read as the paper's clustering, so the comparison and any breach
+    of TOLERANCE_PCT are written into the results file itself rather than left
+    to whoever happens to read the console. Both the cluster delta and the file
+    delta are gated, and the breach is returned so that it can reach the exit
+    status rather than only the markdown.
 
     Returns (lines, breach).
     """
@@ -319,7 +349,7 @@ def baseline_comparison(scan, base):
     ref_clusters, ref_files = ref.get("unique_clusters"), ref.get("files_in_clusters")
     if ref_clusters is None or ref_files is None:
         # A committed scan without these keys is a broken input, not an optional
-        # check: every number in this file is scored against that scan.
+        # check: every number in this file is compared with that scan.
         raise ValueError(
             f"{SCAN.name} carries no cluster counts in its `summary`; "
             "the baseline cannot be cross-checked against the archived scan.")
@@ -333,14 +363,68 @@ def baseline_comparison(scan, base):
     if breach:
         out += ["",
                 f"**Baseline differs from the archived scan by more than {TOLERANCE_PCT:.0f}%, so the "
-                f"file set is not the one the archived scan was built from.** The corpus in use is "
-                f"`{CORPUS}`; compare the snapshot table above against the SHAs recorded in "
-                "paper/supplementary/repository-commits.md to see where it diverges. Files that no "
-                "longer resolve are counted in the skipped total above, and files that do resolve may "
+                f"file set is not the one the archived scan was built from.** Compare the snapshot "
+                f"table above against the SHAs recorded in paper/supplementary/repository-commits.md "
+                "to see where the directory named by `LIBRARIAN_CORPUS` diverges. Files whose paths "
+                "do not resolve are counted in the skipped total above, and files that do resolve may "
                 "still have changed content. The order comparison below is internally valid either way, "
-                "because every shuffle is scored against this same signature set, but the absolute "
+                "because every shuffle is measured against this same signature set, but the absolute "
                 "cluster counts here are not the paper's."]
     return out + [""], breach
+
+def render(scan, files, sigs, skipped, base, rows):
+    """All lines of the results file, header to table, from the computed values.
+
+    Returns (lines, baseline_breach). Kept apart from main() so the prose can be
+    checked against the shipped file without recomputing signatures.
+    """
+    name = Path(__file__).name
+    base_slots = sum(len(c) for c in base)
+    base_distinct = len({x for c in base for x in c})
+    lines = ["# File-order permutation sensitivity (90% threshold, SKILL.md only)", "",
+             "This file reports how much the greedy first-match clustering changes when the file "
+             "order is shuffled with the MinHash signatures held fixed. It supports this sentence in "
+             "Section 3.3 (Similarity Analysis) of the paper: " + PAPER_CLAIM + " Section 6 "
+             "(Limitations) repeats the range as \"0.982 to 0.992 across orderings\". Both are the "
+             "minimum and maximum of the adjusted Rand column in the table at the end of this file.",
+             "",
+             f"Generated by `{name}`; rerun with `python paper/sources/scans/{name}` from the "
+             "repository root, with `LIBRARIAN_CORPUS` set to the root of the pinned corpus snapshot "
+             "(SHAs in `paper/supplementary/repository-commits.md`). The variable has no default; a "
+             "run without it stops before computing anything.",
+             f"Input scan: `{SCAN.name}`, beside the script; its `file_index` is the file list.", "",
+             f"Files with signatures: {len(sigs)} of {len(files)}. Skipped {skipped['missing']} whose "
+             f"path does not resolve under the corpus root, {skipped['short']} shorter than 100 "
+             f"characters, and {skipped['empty']} that produced no shingles.",
+             f"Baseline (sorted file-index order): {len(base)} clusters, {base_slots} files clustered "
+             f"as a sum of cluster sizes, {base_distinct} distinct files. The two differ because clusters "
+             f"may overlap: {base_slots - base_distinct} files are returned by more than one seed's query. "
+             f"The archived scan's 'files in clusters' is the same sum-of-sizes count, so the two compare "
+             f"like with like.",
+             f"K = {K} shuffles, seeds 1000..{1000 + K - 1}, signatures fixed (datasketch default seed).", "",
+             f"Output defaults to `order-permutation-<UTC date>.md`; set `SCAN_RESULTS_OUT` to a "
+             f"full path to write elsewhere instead of overwriting a previously dated results file.",
+             ""]
+    lines += provenance(scan)
+    baseline_lines, baseline_breach = baseline_comparison(scan, base)
+    lines += baseline_lines
+    lines += ["Columns. *clusters*: number of clusters the shuffled order produced. "
+              "*Rand index*: share of file pairs assigned the same way (together, or apart) in both "
+              "clusterings. *adjusted Rand*: the Hubert-Arabie chance-corrected form of it, 1.0 for "
+              "identical, 0.0 for chance-level; `nan` where it is undefined. *baseline clusters "
+              "reproduced exactly*: share of the baseline's clusters that appear in the shuffled run as "
+              "the identical set of files.",
+              "",
+              "Both Rand indices are computed over a hard partition obtained by flattening each "
+              "clustering with last-cluster-wins, so a file in more than one cluster is counted only in "
+              "the last one. They therefore measure agreement on that flattened assignment, not on the "
+              "overlapping cluster lists.",
+              "",
+              "| shuffle | clusters | Rand index | adjusted Rand | baseline clusters reproduced exactly |",
+              "|---:|---:|---:|---:|---:|"]
+    for k, n, ri, ari, exact in rows:
+        lines.append(f"| {k} | {n} | {ri:.4f} | {ari:.4f} | {exact:.3f} |")
+    return lines, baseline_breach
 
 def main() -> int:
     scan = json.loads(SCAN.read_text())
@@ -365,50 +449,7 @@ def main() -> int:
         # which would read as a measured "nothing was reproduced".
         exact = sum(1 for c in cl if c in base_set) / len(base) if base else float("nan")
         rows.append((k, len(cl), ri, ari, exact))
-    base_slots = sum(len(c) for c in base)
-    base_distinct = len({x for c in base for x in c})
-    # The rerun command has to carry the corpus selection, or it regenerates a
-    # different corpus's numbers under this file's name.
-    env_corpus = os.environ.get("LIBRARIAN_CORPUS")
-    prefix = f"LIBRARIAN_CORPUS={tilde(env_corpus)} " if env_corpus else ""
-    lines = ["# File-order permutation robustness (90% threshold, SKILL.md only)", "",
-             f"Generated by `{Path(__file__).name}`; rerun with "
-             f"`{prefix}python paper/sources/scans/{Path(__file__).name}` "
-             f"from the repository root.",
-             f"The corpus is chosen by the `LIBRARIAN_CORPUS` environment variable, which has "
-             f"no default; a run without it stops before computing anything.",
-             f"Output defaults to `order-permutation-<UTC date>.md`; set `SCAN_RESULTS_OUT` to a "
-             f"full path to write elsewhere instead of overwriting a previously dated results file.",
-             f"Input scan: `{SCAN.name}`.", "",
-             f"Files with signatures: {len(sigs)} of {len(files)}. Skipped {skipped['missing']} because "
-             f"the file is no longer in the corpus, {skipped['short']} shorter than 100 characters, and "
-             f"{skipped['empty']} that produced no shingles.",
-             f"Baseline (sorted file-index order): {len(base)} clusters, {base_slots} files clustered "
-             f"as a sum of cluster sizes, {base_distinct} distinct files. The two differ because clusters "
-             f"may overlap: {base_slots - base_distinct} files are returned by more than one seed's query. "
-             f"The archived scan's 'files in clusters' is the same sum-of-sizes count, so the two compare "
-             f"like with like.",
-             f"K = {K} shuffles, seeds 1000..{1000 + K - 1}, signatures fixed (datasketch default seed).", "",
-             ""]
-    lines += provenance(scan)
-    baseline_lines, baseline_breach = baseline_comparison(scan, base)
-    lines += baseline_lines
-    lines += ["Columns. *clusters*: number of clusters the shuffled order produced. "
-              "*Rand index*: share of file pairs assigned the same way (together, or apart) in both "
-              "clusterings. *adjusted Rand*: the Hubert-Arabie chance-corrected form of it, 1.0 for "
-              "identical, 0.0 for chance-level; `nan` where it is undefined. *baseline clusters "
-              "reproduced exactly*: share of the baseline's clusters that appear in the shuffled run as "
-              "the identical set of files.",
-              "",
-              "Both Rand indices are computed over a hard partition obtained by flattening each "
-              "clustering with last-cluster-wins, so a file in more than one cluster is counted only in "
-              "the last one. They therefore measure agreement on that flattened assignment, not on the "
-              "overlapping cluster lists.",
-              "",
-              "| shuffle | clusters | Rand index | adjusted Rand | baseline clusters reproduced exactly |",
-              "|---:|---:|---:|---:|---:|"]
-    for k, n, ri, ari, exact in rows:
-        lines.append(f"| {k} | {n} | {ri:.4f} | {ari:.4f} | {exact:.3f} |")
+    lines, baseline_breach = render(scan, files, sigs, skipped, base, rows)
     OUT.write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
     if baseline_breach:

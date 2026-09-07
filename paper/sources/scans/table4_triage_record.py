@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
-"""Per-cluster triage record for the precision-and-recall table (Table 4).
+"""Per-cluster triage record for Table 4 (precision and recall at cluster size thresholds).
 
-Table 4's >=20 and >=10 rows reproduce from the released ground truth by the account
-clause of Section 3.4 alone. Its >=15, >=5 and all-clusters rows do not. This record
-lists, for every cluster in those three rows, the attributed accounts, the IOC slug
-hits, and the verdict each candidate rule returns, so the rows can be checked against
-evidence rather than against a stored total.
+Supports Table 4 in Section 4.4 (IOC Validation), whose caption states that only the >= 20
+and >= 10 rows reproduce from the released ground truth. The true-positive rule is stated in
+Section 3.4 (Ground Truth and Validation): "A true positive is a cluster containing at least
+one file attributed to a documented attacker account (Antiy CERT's 12 authors, Koi IOC slugs,
+or files confirmed through payload inspection)." The >= 20 and >= 10 rows reproduce from the
+account clause alone; the >= 15, >= 5 and all-clusters rows do not. This record lists, for
+every cluster in those three rows, the attributed accounts, the slug hits, and the verdict
+each candidate rule returns, so the rows can be checked against evidence rather than against
+a stored total.
 
-Inputs: `scan_20260314_threshold90_skillonly.json` and `paper/iocs.json`. Account
-attribution is imported from `file_level_precision.py` rather than restated, so the two
-cannot drift. No corpus access: every figure comes from those two files.
+Inputs: `scan_20260314_threshold90_skillonly.json` beside this script and `paper/iocs.json`.
+Account attribution is imported from `file_level_precision.py` rather than restated, so the
+two scripts apply one rule by construction. Nothing here reads the corpus: every figure is a
+function of those two files, and LIBRARIAN_CORPUS is not needed.
 
 Output: `table4-triage-record-20260907.md` beside this script.
 
-Run:
+Run from the repository root:
   python paper/sources/scans/table4_triage_record.py
 """
 import json, subprocess, sys
@@ -28,7 +33,7 @@ SCAN = HERE / "scan_20260314_threshold90_skillonly.json"
 IOCS = HERE.parents[1] / "iocs.json"
 OUT = HERE / "table4-triage-record-20260907.md"
 REPO = HERE.parents[2]
-NON_REPRODUCING = (15, 5, None)   # the rows this record exists for
+NON_REPRODUCING = (15, 5, None)   # the Table 4 rows this record exists for
 EXAMPLES_PER_CLUSTER = 3
 
 
@@ -106,14 +111,14 @@ def cells(cluster, codes, v=None, flag=None):
 
 
 def reconciliation(clusters, study, slugs):
-    """Item 2: what each rule scores on the rows that do not reproduce."""
+    """What each candidate rule scores on every Table 4 row, against the published count."""
     lines = ["## The three rows that do not reproduce", "", P("""
         `account` is the 18-account study rule of `file_level_precision.py` (Antiy CERT's 12 plus the six
         further `clawhub_authors` accounts), lifted to clusters by Section 3.4's "at least one file";
         `scaffold` is the scan's own cluster tag (single marketplace, >= 5 files, average similarity >=
         0.98); `inventory slug` is a file whose directory name is one of the 734 slugs `iocs.json`
         inventories under the study's 11 `clawhub_authors`. It stands in for Section 3.4's Koi-slug clause
-        because Koi's published 341-slug list is not in this repository, and `file_level_precision.py`
+        because Koi's published 341-slug list is not part of this artifact, and `file_level_precision.py`
         argues in `cross_check()`, under "What has been ruled out", that "Koi's 341 IOC slugs
         are not the missing marker"."""), "",
         "| row | published TP | account | account OR scaffold | account OR scaffold OR inventory"
@@ -129,25 +134,25 @@ def reconciliation(clusters, study, slugs):
         names[th] = name = f">= {th}" if th is not None else "all clusters"
         lines.append(f"| {name}{'' if th in NON_REPRODUCING else ' *'} | {pub}/{n} | {acct} |"
                      f" {both} | {plus} | {pub - acct} | {pub - both} | {dis} |")
-    scored = ", ".join(f"{plus} against {pub} at {names[th]}"
+    tallies = ", ".join(f"{plus} against {pub} at {names[th]}"
                        for th, (pub, plus) in plus_by_row.items() if th in NON_REPRODUCING)
     left = {th: plus_by_row[th][0] - plus_by_row[th][1] for th in NON_REPRODUCING}
     lines += ["", P("""Rows marked `*` reproduce from the account clause alone and are not triaged
         here. A negative gap means the rule credits more clusters than Table 4 publishes, as
         `account OR scaffold` does at >= 10."""), "", P(f"""**Adding the author-inventory slug rule
         closes the all-clusters row arithmetically and no part of the >= 5 gap.** The account rule in
-        `file_level_precision.py` implements only the first of Section 3.4's three routes, so its
-        reconstruction misses every cluster whose sole evidence is a slug. Adding this stand-in for
-        the second gives {scored}: every cluster it adds is below size 5, so the >= 5 count does not
+        `file_level_precision.py` implements only the first of Section 3.4's three routes, so on its own
+        it misses every cluster whose sole evidence is a slug. Adding this stand-in for
+        the second gives {tallies}: every cluster it adds is below size 5, so the >= 5 count does not
         move and the below-5 part of the all-clusters row lands exactly on the published 44, leaving
         {left[5]} cluster at >= 5 and {left[None] - left[5]} elsewhere for the payload-inspection
-        clause. Read the next section before trusting that arithmetic: most of those nine match on a
+        clause. The next section qualifies that arithmetic: most of those nine match on a
         short or generic slug."""), ""]
     return lines
 
 
 def size_tables(clusters, study, slugs, codes):
-    """Item 3: one row per cluster in the >= 5 set, then the all-clusters row below size 5."""
+    """One row per cluster in the >= 5 set, then the all-clusters row below size 5."""
     ge5 = sorted([c for c in clusters if c["size"] >= 5], key=lambda c: (-c["size"], c["cluster_id"]))
     lines = [f"## Every cluster in the >= 5 row ({len(ge5)} clusters)", "", P("""
         `flag` is `disagree` where the account and scaffold rules give different verdicts, and `residual`
@@ -192,42 +197,41 @@ def size_tables(clusters, study, slugs, codes):
     lines += ["", f"### Credited by the author-inventory slug rule only ({len(slug_only)})", "", P(f"""
         These carry no file under a documented account and no scaffold tag, but hold a file whose directory
         name is in the `iocs.json` author inventory. Section 3.4 counts slug attribution as a true positive,
-        so on the paper's own rule they qualify; the account-only reconstruction in
-        `file-level-precision-20260907.md` misses them. **Read the matched slug before crediting anything.**
-        Slug matching compares directory names, and {len(weak)} of the slugs matched here are short or
-        generic ({', '.join('`' + w + '`' for w in weak)}), which collide with benign directories under
-        accounts nobody has documented; the paths below show that happening. The arithmetic landing on the
-        published total is worth weighing, not proof that these were the March triage's nine."""), "",
+        so under the paper's rule they qualify; the account-only rule of
+        `file-level-precision-20260907.md` does not credit them. **The matched slug decides whether a credit
+        is warranted.** Slug matching compares directory names, and {len(weak)} of the slugs matched here are
+        short or generic ({', '.join('`' + w + '`' for w in weak)}), which collide with benign directories
+        under accounts nobody has documented; the paths below show that happening. That the arithmetic lands
+        on the published total does not show that these are the nine clusters the triage credited."""), "",
         "| cluster | size | marketplaces | avg sim | type | matched slugs | files |",
         "|---:|---:|:--|---:|:--|:--|:--|"]
     lines += [f"| {cells(c, codes)} | {', '.join('`' + h + '`' for h in v['slug_hits'])} | "
               + "<br>".join(f"`{l['marketplace']}/{l['path']}`" for l in c["locations"]) + " |"
               for c, v in slug_only]
-    lines += ["", P(f"""**What could identify a payload-inspection true positive below size 5, should
-        the author overrule a row above.** The `iocs.json` payload markers, applied to file text as in the
-        exploratory `content` column of `file_level_precision.py` (which reads the corpus this script does
-        not), add 13 clusters over the account rule at the all-clusters row, whose notes give their
-        dominant driver as the `clawdhub.com` typosquat carried
-        with status "unknown". Structural properties are weaker
-        still: {with_claw} of the {len(small)} clusters here hold a ClawHub archive location and
-        {near} reach the scaffold tag's 0.98 average similarity."""), ""]
+    lines += ["", P(f"""**Evidence available for the payload-inspection clause below size 5.** The
+        `iocs.json` payload markers, applied to file text as in the exploratory `content` column of
+        `file_level_precision.py` (which reads the corpus this script does not), add 13 clusters over the
+        account rule at the all-clusters row; `file-level-precision-20260907.md` gives their dominant driver
+        as the `clawdhub.com` typosquat, which `iocs.json` carries with status "unknown". Structural
+        properties are weaker still: {with_claw} of the {len(small)} clusters here hold a ClawHub archive
+        location and {near} reach the scaffold tag's 0.98 average similarity."""), ""]
     return lines, counts, {"small_credited": len(credited), "small_slug_only": len(slug_only),
                            "small_pool": pool, "small_published": pub_small, "small_residue": residue}
 
 
 def how_to_confirm(clusters, study, slugs):
-    """Item 4: which clusters to open, in what order, and where their files live."""
+    """Which clusters to open, in what order, and where their files live."""
     pairs = [(c, verdicts(c, study, slugs)) for c in clusters if c["size"] >= 5]
     dis = sorted([p for p in pairs if p[1]["account_tp"] != p[1]["scaffold_tp"]],
                  key=lambda cv: (-cv[0]["size"], cv[0]["cluster_id"]))
     lines = ["## How to confirm", "", P(f"""
-        Open the {len(dis)} `disagree` clusters first: one rule credits each and the other does not, so each
-        is a decision this record cannot make for you. Within them the clusters at >= 15 come first, because
-        that row is published as 23/23 and one overrule there changes a 100% precision claim. The `residual`
-        clusters at >= 5 come last: if the published 60 includes the 59 credited here, one more cluster
-        comes from that pool, and no released rule says which. Files live under
-        `$LIBRARIAN_CORPUS/<marketplace>/<path>`; up to {EXAMPLES_PER_CLUSTER} per cluster are shown, ClawHub archive
-        first, and the full location list is in the scan JSON under `cluster_id`."""), ""]
+        The {len(dis)} `disagree` clusters come first: one rule credits each and the other does not, so each
+        needs a reading of its files. Within them the clusters at >= 15 lead, because that row is published
+        as 23/23 and a single cluster there decides a 100% precision claim. The `residual` clusters at >= 5
+        come last: if the published 60 includes the 59 credited here, one more cluster comes from that pool,
+        and no released rule says which. Files live under `$LIBRARIAN_CORPUS/<marketplace>/<path>`; up to
+        {EXAMPLES_PER_CLUSTER} per cluster are shown, ClawHub archive first, and the full location list is in
+        the scan JSON under `cluster_id`."""), ""]
     for c, v in dis:
         rule = "account only" if v["account_tp"] else "scaffold only"
         locs = sorted(c["locations"], key=lambda l: (l["marketplace"] != CLAWHUB, l["path"]))
@@ -245,23 +249,29 @@ def main() -> int:
     commit, clusters = head_commit(), scan["clusters"]
     antiy, study, slugs = load_ground_truth(iocs)
     codes = market_codes(clusters)
-    header = ["# Table 4 per-cluster triage record", "",
+    header = ["# Table 4 per-cluster triage record", "", P("""
+        This file supports Table 4 of the paper (Section 4.4, IOC Validation), whose caption states that
+        only the >= 20 and >= 10 rows reproduce from the released ground truth. It lists every cluster in
+        the three rows that do not (>= 15, >= 5 and all clusters) with the evidence each candidate rule
+        finds, under the true-positive rule of Section 3.4 (Ground Truth and Validation): "A true positive
+        is a cluster containing at least one file attributed to a documented attacker account (Antiy CERT's
+        12 authors, Koi IOC slugs, or files confirmed through payload inspection)." The published rows come
+        from the hand triage Section 4.4 describes, whose per-cluster decisions are not part of the released
+        ground truth; a verdict here is what a candidate rule returns, not a record of that triage."""), "",
         f"Generated by `{Path(__file__).name}` at commit `{commit}`. Regenerate from the repository"
         " root with:", "", f"    python paper/sources/scans/{Path(__file__).name}", "",
         P(f"""Inputs: `paper/sources/scans/{SCAN.name}` (the 90% Jaccard, SKILL.md-only scan of
         2026-03-14) and `paper/iocs.json` ({len(antiy)} Antiy CERT accounts,
         {len(iocs['clawhub_authors'])} `clawhub_authors`, {len(slugs)} inventoried slugs). Account
         attribution is imported from `file_level_precision.py`, not reimplemented, and nothing here reads the
-        corpus, so every figure is a function of those two files and the run is
-        deterministic; the commit line is the only part that varies with repository state."""), "",
+        corpus, so LIBRARIAN_CORPUS is not needed, every figure is a function of those two files, and the run
+        is deterministic; the commit line is the only part that varies with repository state."""), "",
         P("""**Self-test.** Before either input is read the script runs `self_test()` on a
         five-cluster synthetic scan with a hand-computed answer: clusters credited by both rules, by the
         account rule only, by the scaffold tag only, by neither, and one two-file cluster whose sole evidence
         is an inventory slug. It asserts each cluster's account and slug evidence, the >= 5 row counts (4
         clusters, 2 by account, 3 by account OR scaffold, 3 with the slug rule, 2 disagreements), one rendered
-        table row, and the marketplace codes, exiting non-zero on any failure. The rows below were fixed by a
-        March 2026 hand triage whose per-cluster decisions
-        were never recorded, so a verdict here is not a claim about what that triage decided."""), "",
+        table row, and the marketplace codes, exiting non-zero on any failure."""), "",
         "**Marketplace codes.** " + "; ".join(
             f"`{c}` {n}" for n, c in sorted(codes.items(), key=lambda kv: kv[1])) + ".", ""]
     tables, counts, small = size_tables(clusters, study, slugs, codes)

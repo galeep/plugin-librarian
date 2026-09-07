@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
-"""What a behavioral hit is worth on each side of the pattern/cluster overlap (RQ3).
+"""Cross-tabulations behind the RQ3 overlap paragraph of Section 4.5, Structural Clustering
+vs. Pattern-Based Triage (RQ3).
 
-Section 4.5 reports the overlap as a bare share, "Of the 1,469 files matching at least one
-pattern, 485 (33.0%) also appeared in similarity clusters", which this script recomputes.
-That share sizes the intersection and says nothing about what the hits on each side are
-worth. This script cross-tabulates the population on pattern hit against
-cluster membership, splits every cell by attribution to a documented attacker account, and
-repeats it with the iocs.json payload indicators in place of the grep patterns.
+Section 4.5 reads: "Of the 1,469 files matching at least one pattern, 485 (33.0%) also
+appeared in similarity clusters, and within that intersection 245 (50.5%) belong to documented
+accounts, against 17 of the 984 hits outside clusters (1.7%), the remaining 967 carrying no
+attribution to a documented account. Clustering also holds 376 documented attackers' files
+that match no pattern, 317 of them hightower6eu copies; over the 714 documented files in the
+archive, clustering reaches 621 and the pattern scan 262." and, one sentence later, "The
+in-cluster agreement is concentrated: sakaen736jih supplies 195 of the 245 documented
+in-cluster hits, and 227 of the 245 match the base64 pattern." This script computes every
+number in those sentences: it cross-tabulates the ClawHub population on pattern hit against
+cluster membership, splits every cell by attribution to a documented attacker account, counts
+the documented files each signal reaches, lists the accounts behind the documented cells, and
+repeats the first table with the iocs.json payload indicators in place of the grep patterns.
 
 Nothing here is re-derived: the six primary regexes and the population rule are copied verbatim
 from `behavioral-scan-20260907.md`, the tracked output of `behavioral_scan.py`; `account_of`,
@@ -15,11 +22,15 @@ run recomputes that scan's counts, union, overlap, index size and cluster total,
 documented totals, stopping on a disagreement, which would mean these tables describe a
 different scan or a different attribution rule.
 
-Output: `rq3-hit-value-<UTC date>.md` beside this script, or the full path in
+Inputs: LIBRARIAN_CORPUS, the pinned corpus snapshot, under which the ClawHub archive is
+read; the scan JSON and iocs.json that `file_level_precision.py` locates beside itself; and
+`behavioral-scan-20260907.md` for the patterns and the population rule.
+
+Output: `rq3-hit-value-YYYYMMDD.md` (UTC date) beside this script, or the full path in
 SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's file.
 
-Run: LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS \
-     python paper/sources/scans/rq3_hit_value.py
+Run, with LIBRARIAN_CORPUS set:
+  python paper/sources/scans/rq3_hit_value.py
 """
 import collections, datetime, json, math, os, re, subprocess, sys, time
 from pathlib import Path
@@ -31,6 +42,15 @@ import file_level_precision as flp  # account_of, payload_indicators, ContentMar
 SCAN, IOCS, CLAWHUB = flp.SCAN, flp.IOCS, flp.CLAWHUB
 CORPUS = Path(flp.require_corpus())    # required here; flp leaves it optional
 PATTERN_SOURCE = "behavioral-scan-20260907.md"
+# The two Section 4.5 sentences these tables support, quoted verbatim in the output.
+QUOTE_A = ('"Of the 1,469 files matching at least one pattern, 485 (33.0%) also appeared in'
+           ' similarity clusters, and within that intersection 245 (50.5%) belong to documented'
+           ' accounts, against 17 of the 984 hits outside clusters (1.7%), the remaining 967'
+           " carrying no attribution to a documented account. Clustering also holds 376 documented"
+           " attackers' files that match no pattern, 317 of them hightower6eu copies; over the 714"
+           ' documented files in the archive, clustering reaches 621 and the pattern scan 262."')
+QUOTE_B = ('"The in-cluster agreement is concentrated: sakaen736jih supplies 195 of the 245'
+           ' documented in-cluster hits, and 227 of the 245 match the base64 pattern."')
 NOW = datetime.datetime.now(datetime.timezone.utc)
 OUT = Path(os.environ.get("SCAN_RESULTS_OUT")
            or HERE / f"rq3-hit-value-{NOW:%Y%m%d}.md")
@@ -57,8 +77,8 @@ from behavioral_scan import (PAPER_UNION as EXPECTED_UNION,          # noqa: E40
                              PAPER_OVERLAP as EXPECTED_OVERLAP,
                              PAPER_POPULATION as EXPECTED_POPULATION)
 EXPECTED_INDEXED, EXPECTED_CLUSTERED = 23654, 4250   # clawhub rows in file_index, in_cluster
-# Documented files in the population, of them clustered and pattern-hit. Pinned from the run
-# of 2026-09-07 after printing, and independently reproduced before being written down here.
+# Documented files in the population, of them clustered and pattern-hit: the 714, 621 and 262
+# that Section 4.5 quotes. A run that disagrees with any expected value stops (`ok` in main).
 EXPECTED_DOCUMENTED, EXPECTED_DOC_CLUSTERED, EXPECTED_DOC_HIT = 714, 621, 262
 HEADER = ["| flag | side | files | documented account | not documented | documented share |",
           "|---|---|---:|---:|---:|---:|"]
@@ -115,14 +135,6 @@ def git_head(path) -> str:
         return f"unavailable ({exc.__class__.__name__})"
 
 
-def home_relative(path) -> str:
-    """`~`-anchored form of a path, so no machine-specific prefix is written out."""
-    try:
-        return "~/" + str(Path(path).relative_to(Path.home()))
-    except ValueError:
-        return str(path)
-
-
 def study_accounts(iocs: dict) -> frozenset:
     """The `study` ground truth of file_level_precision.py, with that script's own checks."""
     refs = [r for r in iocs["metadata"]["references"] if r.get("source") == "Antiy CERT"]
@@ -139,8 +151,8 @@ def main() -> int:
     started = time.monotonic()
     root = CORPUS / CLAWHUB
     if not root.is_dir():
-        print(f"clawhub archive not found at {home_relative(root)}; set LIBRARIAN_CORPUS to the"
-              " pinned snapshot", file=sys.stderr)
+        print(f"clawhub archive not found at {root}; set LIBRARIAN_CORPUS to the pinned"
+              " snapshot", file=sys.stderr)
         return 1
 
     scan = json.loads(SCAN.read_text(encoding="utf-8"))
@@ -151,12 +163,13 @@ def main() -> int:
     marker = flp.ContentMarker(indicators)
 
     # The population rule of PATTERN_SOURCE: every file named SKILL.md under the archive.
-    # DESIGN RATIONALE for os.walk over rglob("SKILL.md"): this filesystem is case-insensitive and
-    # pathlib resolves a literal final component by an existence check rather than by listing the
-    # directory, so rglob("SKILL.md") returns 24,368 entries: the 23,806 real ones, 561 case
+    # DESIGN RATIONALE for os.walk over rglob("SKILL.md"): on a case-insensitive filesystem pathlib
+    # resolves a literal final component by an existence check rather than by listing the
+    # directory, so rglob("SKILL.md") there returns 24,368 entries: the 23,806 exact-name files, 561 case
     # variants (530 skill.md, 18 Skill.md, 13 with a .MD extension) reported under the requested
     # name, where a p.name test cannot tell them apart, and one DIRECTORY,
-    # skills/jamipuchi/openclaw-leaderboard/src/app/SKILL.md. os.walk sees the real names.
+    # skills/jamipuchi/openclaw-leaderboard/src/app/SKILL.md. os.walk sees the on-disk names on
+    # every filesystem.
     files = sorted(Path(dirpath, name) for dirpath, _, names in os.walk(root)
                    for name in names if name == "SKILL.md")
     rows, unindexed_hits, per_pattern = [], 0, [[] for _ in PATTERNS]
@@ -221,10 +234,13 @@ def main() -> int:
 
     lines = ["# What a behavioral hit is worth on each side of the overlap (RQ3)", "",
         f"Generated by `{Path(__file__).name}` on {NOW:%Y-%m-%d %H:%M} UTC.", "",
-        "Section 4.4 quantifies the overlap as a share of pattern hits, which counts a hit inside"
-        " a cluster and one outside it alike and leaves out the files clustering reaches with no"
-        " pattern hit. Every table below splits that population by attribution to a documented"
-        f" attacker account under the `study` rule of `file_level_precision.py`: Antiy CERT's 12"
+        "This file reports the cross-tabulations behind the overlap paragraph of Section 4.5,"
+        " Structural Clustering vs. Pattern-Based Triage (RQ3), which reads: " + QUOTE_A
+        + " and, one sentence later, " + QUOTE_B + " Table 1 carries the first sentence, tables 2"
+        " and 4 the second, table 3 its reach figures, and table 4 with the per-pattern rows of"
+        " table 1 the last; section 6 maps each sentence to its table.", "",
+        "Every table splits the pattern-hit or the clustered population by attribution to a"
+        f" documented attacker account under the `study` rule of `file_level_precision.py`: Antiy CERT's 12"
         f" accounts and the {len(study) - 12} further `clawhub_authors` accounts this study"
         " confirmed by payload inspection, attributed by the account segment of the ClawHub"
         " archive path, so a community-repository file carries no account. The documented-share"
@@ -232,12 +248,11 @@ def main() -> int:
         " figures of `file_level_precision.py`, whose denominator is every file in a"
         " size-thresholded cluster and which scores clusters, not pattern hits.", "",
         "## Provenance", "", "| item | value |", "|---|---|",
-        f"| corpus root | `{home_relative(CORPUS)}` |", f"| `{CLAWHUB}` HEAD | {git_head(root)} |",
+        "| corpus root | `$LIBRARIAN_CORPUS` |", f"| `{CLAWHUB}` HEAD | {git_head(root)} |",
         f"| repository HEAD | {git_head(HERE)} |", f"| input scan | `{SCAN.name}` |",
         f"| ground truth | `{IOCS.name}`: {len(study)} accounts, {len(indicators)} indicators |",
         f"| patterns, population rule | `{PATTERN_SOURCE}` (copied verbatim, not re-derived) |",
-        f"| command | `LIBRARIAN_CORPUS={home_relative(CORPUS)}"
-        " python paper/sources/scans/rq3_hit_value.py` |",
+        "| command | `python paper/sources/scans/rq3_hit_value.py` |",
         f"| runtime | {runtime:.1f} s |", "", "## Population and patterns", "",
         f"- files scanned: {len(files)} `SKILL.md` under `{CLAWHUB}/` in the pinned snapshot,"
         f" the unfiltered archive population `{PATTERN_SOURCE}` uses",
@@ -267,8 +282,8 @@ def main() -> int:
         "", "## 2. Clustered files carrying no pattern hit", "",
         f"- clustered files with no hit on any of the six primaries: {no_hit}, of which"
         f" {no_hit_doc} ({share(no_hit_doc, no_hit)}) are attributed to a documented account", "",
-        "This is what the published overlap share leaves out: files the structural method reaches"
-        " and the patterns do not.", "",
+        "These are the files the structural method reaches and the patterns do not; Section 4.5"
+        " quotes the documented count among them, and table 4 lists the accounts behind it.", "",
         "## 3. Documented files: reach of each signal", "",
         f"Documented throughout this file means attributed to the {len(study)}-account study set"
         " by `account_of` from `file_level_precision.py`: the account segment of the ClawHub"
@@ -296,23 +311,31 @@ def main() -> int:
         " `content` marker of `file_level_precision.py`, imported unchanged) in place of the six"
         " grep primaries, so known-infrastructure hits can be compared against generic behavioral"
         " ones. A content hit is a case-folded substring match, so a document about the attack"
-        " matches as a delivery vehicle does, and `clawdhub.com` is its weakest driver.", "",
+        " matches as a delivery vehicle does, and `clawdhub.com` is its weakest driver. The paper"
+        " does not quote this table.", "",
     ] + HEADER + table_rows(ind, "payload indicator") + [
         "", "## 6. What these tables support", "",
         f"1. Of the {overlap} pattern-hit files that also sit in a similarity cluster, {in_doc}"
         f" ({share(in_doc, overlap)}) are attributed to a documented attacker account, against"
         f" {out_doc} of the {outside} pattern-hit files outside any cluster"
-        f" ({share(out_doc, outside)}): {ratio}. [table 1; population and patterns from"
-        f" `{PATTERN_SOURCE}`, attribution from `file_level_precision.py`]",
+        f" ({share(out_doc, outside)}): {ratio}. The paper quotes the counts and shares, not the"
+        f" ratio. [table 1; population and patterns from `{PATTERN_SOURCE}`, attribution from"
+        " `file_level_precision.py`]",
         f"2. Clustering reaches {no_hit} files matching none of the six patterns, {no_hit_doc} of"
-        f" them ({share(no_hit_doc, no_hit)}) attributed to documented attacker accounts, so the"
-        " overlap share understates the complementarity it is quoted for. [table 2]", "",
+        f" them ({share(no_hit_doc, no_hit)}) attributed to documented attacker accounts;"
+        f" {top_nohit[1]} of those {no_hit_doc} are `{top_nohit[0]}` files. [tables 2 and 4]",
+        f"3. Over the {len(doc)} documented files in the archive, clustering reaches"
+        f" {doc_clustered} and the pattern scan {doc_hit}. [table 3]",
+        f"4. `{top_hit[0]}` supplies {top_hit[1]} of the {in_doc} documented in-cluster hits, and"
+        f" {top_pattern[1]} of the {in_doc} match the {top_pattern[0].lower()} pattern. [table 4;"
+        " per-pattern rows of table 1]", "",
     ]
     OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
     if not ok:
         print(f"STOP: recomputed pattern counts, union or overlap disagree with {PATTERN_SOURCE};"
-              " these tables do not describe the published rerun", file=sys.stderr)
+              " these tables do not describe the scan Section 4.5 and Table 7 report",
+              file=sys.stderr)
         return 1
     return 0
 

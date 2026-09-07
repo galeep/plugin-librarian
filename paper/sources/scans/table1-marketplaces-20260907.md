@@ -1,5 +1,7 @@
 # Table 1 (corpus repositories) recomputed from the archived 90% scan
 
+This file reports the file count of every corpus repository, recomputed from the archived scan, and compares each row against Table 1 as printed. It supports Table 1 in Section 3.2 (Dataset Construction), captioned "Repositories included in the corpus. File counts reflect SKILL.md files meeting the 100-character minimum after filtering."
+
 ## Provenance
 
 - Input: `paper/sources/scans/scan_20260314_threshold90_skillonly.json`
@@ -10,7 +12,7 @@
 
 Counts are files per `marketplace` value in the scan's `file_index`, which is the corpus after the 100-character minimum filter.
 
-## Row-by-row comparison against Table 1 as published
+## Row-by-row comparison against Table 1 as printed
 
 | Row | Computed | Table 1 as printed | Match |
 |---|---:|---:|:--:|

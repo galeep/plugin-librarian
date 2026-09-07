@@ -1,44 +1,46 @@
 #!/usr/bin/env python3
-"""What the "backup" path skip excluded from the clustering.
+"""What the backup-path filter excluded from the clustering.
 
-`librarian/cli.py` drops any path whose lowercased string contains "backup"
-before it is ever hashed. On the pinned March snapshot that excluded 864
-SKILL.md files, 74 of them inside the ClawHub archive, and 2 of those 74 are
-hightower6eu skills. Section 3.2 of the paper records the 864; Section 4.4 and
-the Limitations section record the 2.
+`librarian/cli.py` at the tool commit the published scan ran at (b55ceff)
+dropped any path whose lowercased string contains "backup" before the file was
+hashed. On the pinned corpus snapshot that excluded 864 SKILL.md files, 74 of
+them inside the ClawHub archive, and 2 of those 74 are hightower6eu skills.
+Section 3.2 of the paper (Dataset Construction) records the 864; Section 4.4
+(IOC Validation) and Section 6 (Limitations) record the 2.
 
-This script asks the counterfactual directly. It reuses `order_permutation`'s
-`load_files`, `signatures` and `greedy` unchanged, so the archived clustering is
-reproduced exactly at the default datasketch seed, then:
+This script measures what that exclusion cost. It imports `load_files`,
+`signatures` and `greedy` from `order_permutation.py` unchanged, so the
+archived clustering is reproduced exactly at the default datasketch seed, and
+then:
 
-  1. builds the LSH over the archived signatures and queries it with signatures
-     computed for the excluded files under the same tokenizer and MinHash
-     settings (128 permutations, 3-word shingles, LSH threshold 0.9);
-  2. reruns the greedy assignment loop with the two hightower6eu files appended
-     at the END of the file list, so the archived clusters form first and any
-     change is attributable to the two additions;
-  3. reports, for the other 72 ClawHub backup-path files, how many would have
-     returned at least one neighbour and how many of those neighbours sit in an
-     account this study documented.
+  1. builds the LSH over the archived signatures and queries it with
+     signatures computed for the excluded files under the same tokenizer and
+     MinHash settings (128 permutations, 3-word shingles, LSH threshold 0.9);
+  2. reruns the greedy assignment loop with the two hightower6eu files
+     appended at the end of the file list, so the archived clusters form first
+     and any change is attributable to the two additions;
+  3. reports, for the other 72 ClawHub backup-path files, how many return at
+     least one neighbor and how many of those neighbors sit in an account
+     the paper documents.
 
-Read-only against the corpus and against every tracked input.
+The script is read-only against the corpus and against every tracked input.
 
+Inputs: LIBRARIAN_CORPUS (required) names the pinned corpus; the snapshot SHAs
+are listed in paper/supplementary/repository-commits.md.
+`order_permutation.require_corpus()` stops the run at import time when it is
+unset. The script also reads `scan_20260314_threshold90_skillonly.json`
+(beside this script) and `paper/iocs.json`.
 
-Inputs. LIBRARIAN_CORPUS (required) names the pinned March corpus; see
-paper/supplementary/repository-commits.md. `order_permutation.require_corpus()` stops
-the run at import time when it is unset. Also
-`scan_20260314_threshold90_skillonly.json` and `paper/iocs.json`.
+Output: `backup-slug-check-<UTC date>.md` beside this script, or the full path
+in SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's file.
 
-Output: `backup-slug-check-<UTC date>.md` beside this script, or the full path in
-SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's file.
+Self-test (before any real input): two identical toy documents must retrieve
+each other at estimated Jaccard 1.0, so a tokenizer or num_perm mismatch fails
+the run rather than returning "no neighbors", which is an answer this script
+might legitimately give.
 
-Self-test (before any real input): two identical toy documents must retrieve each
-other at estimated Jaccard 1.0, so a tokenizer or num_perm mismatch fails the run
-rather than returning "no neighbours", which is an answer this script might
-legitimately give.
-
-Run:
-  LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS python paper/sources/scans/backup_slug_check.py
+Run, with LIBRARIAN_CORPUS set:
+  python paper/sources/scans/backup_slug_check.py
 """
 import datetime, json, os, subprocess, sys, time
 from pathlib import Path
@@ -58,11 +60,12 @@ OUT = Path(os.environ["SCAN_RESULTS_OUT"]) if os.environ.get("SCAN_RESULTS_OUT")
     else HERE / "backup-slug-check-{}.md".format(
         datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d"))
 
-# The two files the paper counts as absent. Paths are relative to the
-# clawhub-archive marketplace directory, the same form load_files returns.
+# The two hightower6eu files the paper reports as skipped by the filter. Paths
+# are relative to the clawhub-archive marketplace directory, the same form
+# load_files returns.
 HIGHTOWER = ("skills/hightower6eu/openclaw-backup-dnkxm/SKILL.md",
              "skills/hightower6eu/openclaw-backup-wrxw0/SKILL.md")
-# Section 4.4 of main-acm.tex: 354 hightower6eu IOC slugs, 2 skipped by the
+# Section 4.4 of the paper: 354 hightower6eu IOC slugs, 2 skipped by the
 # backup-path filter, 351 of the remaining 352 clustered.
 PAPER_HIGHTOWER_SLUGS = 354
 PAPER_HIGHTOWER_CLUSTERED = 351
@@ -73,7 +76,7 @@ def self_test() -> int:
 
     DESIGN RATIONALE: every number below is an LSH hit or a MinHash Jaccard
     estimate, so a tokenizer or num_perm mismatch between the archived
-    signatures and the ones computed here would show up as "no neighbours" --
+    signatures and the ones computed here would show up as "no neighbors",
     which is exactly the answer the script might legitimately return. Pinning
     the trivial case makes a silent mismatch fail the run instead.
     """
@@ -100,7 +103,7 @@ def self_test() -> int:
 
 
 def repo_head() -> str:
-    """Short HEAD of this repository, dirty flag included."""
+    """Short HEAD of the repository this script runs from, dirty flag included."""
     try:
         env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0"}
         r = subprocess.run(["git", "-C", str(HERE), "rev-parse", "--short", "HEAD"],
@@ -118,29 +121,28 @@ def repo_head() -> str:
 
 
 def backup_files(entries) -> list:
-    """Every SKILL.md under clawhub-archive that the ARCHIVED March scan's filter dropped.
+    """Every SKILL.md under clawhub-archive that the archived scan's filter dropped.
 
-    DESIGN RATIONALE for the substring test rather than the current helper: the
-    rule reproduced here is the one that produced `scan_20260314_...json`, which
-    is `librarian/cli.py` at commit b55ceff, `"backup" in
-    str(md_file).lower()` over the ABSOLUTE path; the released tree at that
-    commit is identical to the one the published scan ran on. The released
-    `librarian.core.is_backup_path` matches on directory NAMES
-    (cli.py:1468) and so drops far fewer files. Using today's helper here would
-    enumerate a different, smaller set than the one the archived scan actually
-    excluded, and the question being asked is about the archived scan. The
-    corpus root in use carries no "backup" segment, so matching the substring on
-    the marketplace-relative path reproduces the absolute-path test exactly.
+    DESIGN RATIONALE for the substring test rather than the released helper:
+    the rule reproduced here is the one that produced `scan_20260314_...json`,
+    `"backup" in str(md_file).lower()` over the absolute path, as
+    `librarian/cli.py` applied it at tool commit b55ceff. The released
+    `librarian.core.is_backup_path` matches on directory names and so drops
+    far fewer files. Using the released helper here would enumerate a
+    different, smaller set than the one the archived scan excluded, and the
+    question being asked is about the archived scan. Matching the substring on
+    the marketplace-relative path reproduces the absolute-path test exactly
+    provided the corpus root itself carries no "backup" segment.
 
-    The two hightower6eu files are returned first so they occupy the two indices
-    appended for the greedy rerun.
+    The two hightower6eu files are returned first so they occupy the two
+    indices appended for the greedy rerun.
 
     `entries` is the scan's file_index, used to assert that none of the
     enumerated paths is already indexed. Against a scan regenerated with the
-    fixed filter some of these files WILL be present, and appending them would
-    silently double-insert: the same file would sit at two indices, matching
-    itself at J = 1.0 and manufacturing a cluster. That is a wrong answer rather
-    than a missing one, so it exits non-zero instead.
+    released filter some of these files will be present, and appending them
+    would silently double-insert: the same file would sit at two indices,
+    matching itself at J = 1.0 and manufacturing a cluster. That is a wrong
+    answer rather than a missing one, so the script exits non-zero instead.
     """
     root = CORPUS / CLAWHUB
     found = sorted(str(p.relative_to(root)) for p in root.rglob("SKILL.md")
@@ -153,7 +155,7 @@ def backup_files(entries) -> list:
     if already:
         raise SystemExit(
             f"{len(already)} of the {len(found)} enumerated backup paths are ALREADY in "
-            f"{SCAN.name}'s file_index, so this scan was not built with the March "
+            f"{SCAN.name}'s file_index, so this scan was not built with the archived "
             f"substring filter and appending them would double-insert: {already[:5]}")
     return list(HIGHTOWER) + [p for p in found if p not in HIGHTOWER]
 
@@ -171,7 +173,7 @@ def study_accounts() -> set:
 
 
 def neighbours(lsh, sigs, i):
-    """Archived neighbours of signature `i`, as (index, estimated Jaccard), best first.
+    """Archived neighbors of signature `i`, as (index, estimated Jaccard), best first.
 
     The query key for `i` itself is never in this LSH (only archived indices are
     inserted), so no self-hit has to be filtered.
@@ -200,8 +202,9 @@ def main() -> int:
                   file=sys.stderr)
             return 1
 
-    # LSH over the archived signatures ONLY: this is the index the March scan
-    # built, and the one a filtered-out file would have been matched against.
+    # LSH over the archived signatures only: this is the index the archived
+    # scan built, and the one a filtered-out file would have been matched
+    # against.
     lsh_arch = MinHashLSH(threshold=THRESHOLD, num_perm=NUM_PERM)
     for i, m in sigs.items():
         if i < n_arch:
@@ -234,11 +237,12 @@ def main() -> int:
         + ("" if os.environ.get("LIBRARIAN_CORPUS") else "  (LIBRARIAN_CORPUS unset; default)"),
         f"Repository HEAD: `{repo_head()}`",
         f"Input scan: `{SCAN.name}` ({n_arch} indexed files).",
-        f"Command: `LIBRARIAN_CORPUS={tilde(os.environ.get('LIBRARIAN_CORPUS', str(CORPUS)))} "
-        f"python paper/sources/scans/{Path(__file__).name}` from the repository root.",
+        f"Command: `python paper/sources/scans/{Path(__file__).name}` from the repository root, "
+        "with LIBRARIAN_CORPUS set.",
         f"Generated: {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%SZ')}.",
         "",
-        "This check supports three statements in the paper. Section 3.2, Dataset "
+        "This file reports what the backup-path filter excluded from the clustering and "
+        "supports three statements in the paper. Section 3.2, Dataset "
         "Construction: \"Before that test, the scanner had skipped any path containing "
         "`backup` (864 files, 780 of them one repository's backup directory).\" Section 4.4, "
         "IOC Validation: \"Of the 354 slugs, 2 were skipped by the backup-path filter ...; of "
@@ -278,7 +282,7 @@ def main() -> int:
                       f"{THRESHOLD}: this file is a candidate for nothing in the "
                       "archived index.", ""]
         else:
-            lines += [f"{len(nb)} archived neighbours at threshold {THRESHOLD}:", "",
+            lines += [f"{len(nb)} archived neighbors at threshold {THRESHOLD}:", "",
                       "| file_index | marketplace | path | account | est. Jaccard |",
                       "|---:|---|---|---|---:|"]
             for j, jac in nb:
@@ -331,11 +335,10 @@ def main() -> int:
                  ", because not both of the recovered files cluster; see the tables above.")
               + " The percentage is 99.7% on either denominator.",
               "",
-              f"The pair's similarity is not a MinHash artefact. Their exact 3-word-shingle "
+              f"The pair's similarity is not a MinHash artifact. Their exact 3-word-shingle "
               f"Jaccard, computed directly from the two shingle sets rather than estimated, is "
               f"**{exact_j:.4f}** ({inter} shingles shared of {union} in the union; each file has "
-              f"{len(sh[0])} and {len(sh[1])} shingles). An independent recomputation of the "
-              f"same pair also gives {exact_j:.4f}.",
+              f"{len(sh[0])} and {len(sh[1])} shingles).",
               ""]
 
     # ---- the other 72 -----------------------------------------------------
@@ -347,8 +350,8 @@ def main() -> int:
         if k not in sigs:
             # DESIGN RATIONALE: an unsigned file (too short, or no shingles) was
             # never queried, so it is not evidence of isolation. Reporting it as
-            # "0 neighbours" would fold "we did not look" into "we looked and
-            # found nothing" and understate the blind spot.
+            # "0 neighbors" would fold "not queried" into "queried and found
+            # nothing" and understate the blind spot.
             unsigned += 1
             rows.append((rel, acct, None, [], None))
             continue
@@ -362,8 +365,8 @@ def main() -> int:
         rows.append((rel, acct, len(nb), in_study, max((j for _, j in nb), default=None)))
     studied = [r for r in rows if r[3]]
     lines += ["## The other 72 ClawHub backup-path files (query only, no greedy rerun)", "",
-              f"Of {len(others)} files, **{with_nb}** return at least one archived neighbour at "
-              f"threshold {THRESHOLD}, and **{with_study}** of those have at least one neighbour "
+              f"Of {len(others)} files, **{with_nb}** return at least one archived neighbor at "
+              f"threshold {THRESHOLD}, and **{with_study}** of those have at least one neighbor "
               f"in an account this study documented (the 18-account `study` ground truth from "
               f"`file_level_precision.py`, applied with its `account_of`)."
               + (f" {unsigned} file(s) produced no signature and were never queried; they are "
@@ -371,23 +374,23 @@ def main() -> int:
                  if unsigned else ""),
               "",
               "Both counts are LSH candidacy at threshold "
-              f"{THRESHOLD}, not verified isolation. The banded LSH is a probabilistic filter "
-              "with false negatives just under the threshold, so an empty row means no candidate "
-              "was retrieved, not that no similar file exists; a full pairwise comparison would "
-              "be needed to say the latter. A row with a neighbour, by contrast, is a positive "
-              "finding: that file was a cluster member the filter removed. Rows are the "
-              f"marketplace-relative path under `{CLAWHUB}`.",
+              f"{THRESHOLD}, not verified isolation. LSH is a probabilistic filter that can miss "
+              "pairs just under the threshold, so an empty row means no candidate was retrieved, "
+              "not that no similar file exists; a full pairwise comparison would be needed to "
+              "say the latter. A row with a neighbor, by contrast, is a positive finding: that "
+              "file was a cluster member the filter removed. Rows are the marketplace-relative "
+              f"path under `{CLAWHUB}`.",
               ""]
     if studied:
-        lines += ["Files whose neighbours reach an account this study documented: " + " ".join(
-                      f"`{r[0]}` has {r[2]} neighbours at up to est. J {r[4]:.4f}, reaching "
+        lines += ["Files whose neighbors reach an account this study documented: " + " ".join(
+                      f"`{r[0]}` has {r[2]} neighbors at up to est. J {r[4]:.4f}, reaching "
                       + ", ".join(f"`{a}`" for a in r[3])
                       + ": the filter removed a file that would have joined a documented "
-                        "attacker's cluster, and the paper's published distinct-file counts do "
-                        "not include it." for r in studied),
+                        "attacker's cluster; the paper's distinct-file counts describe the "
+                        "corpus as scanned and do not include it." for r in studied),
                   ""]
     lines += [
-              "| path | account | neighbours | neighbour accounts in `study` | max est. Jaccard |",
+              "| path | account | neighbors | neighbor accounts in `study` | max est. Jaccard |",
               "|---|---|---:|---:|---:|"]
     for rel, acct, n_nb, in_study, best in rows:
         st = ", ".join(f"`{a}`" for a in in_study) if in_study else "0"

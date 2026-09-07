@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
 """MinHash seed robustness on the pinned March 2026 corpus.
 
-Recomputes MinHash signatures under five permutation seeds (1, 42, 123, 456, 789) and
-measures how consistently files are grouped, by the Rand index and the Hubert-Arabie
-adjusted Rand index over all ten seed pairs. Supports the seed-robustness figures in
-Section 3.3 (Similarity detection).
+Recomputes MinHash signatures under five permutation seeds (1, 42, 123, 456, 789),
+clusters the corpus under each, and reports per-seed cluster counts plus the Rand
+index and Hubert-Arabie adjusted Rand index over all ten seed pairs.
+
+Paper statements supported, both in Section 3.3 (Similarity Analysis): "Running the
+full analysis with five fixed seeds (the library default, 1, and four arbitrary
+others: 42, 123, 456, 789) produced cluster counts of 2,558 to 2,622; the default
+seed reproduces the archived scan exactly." and, from a later sentence in the same
+paragraph, "distinct clustered files moved from 7,061 to 6,935, a 1.8% spread." Both
+come from the per-seed table this script writes. The adjusted Rand index range that
+same sentence quotes, 0.931 to 0.955, is computed over every file clustered under
+either seed with the remainder as singletons; `recompute_ari.py` reports that
+population as `ari_union` in `recompute-ari-results-20260907.json`. The pairwise
+table here scores the files clustered under both seeds, the `ari_inter` population of
+`recompute-ari-results-20260907.json`, and the two scripts agree on it.
 
 The adjusted Rand index is the Hubert-Arabie form, which subtracts E[a] =
 (a+c)(a+d)/n from the observed agreement count. `self_test` pins the formula against
@@ -22,8 +33,8 @@ script, 31,634 entries, read in its stored order.
 Output: `seed-robustness-<UTC date>.md` beside this script, or the full path in
 SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's file.
 
-Run:
-  LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS python paper/sources/scans/seed_robustness.py
+Run, with LIBRARIAN_CORPUS set:
+  python paper/sources/scans/seed_robustness.py
 """
 
 import sys
@@ -45,9 +56,9 @@ SEEDS = [1, 42, 123, 456, 789]  # 5 different seeds
 def require_corpus():
     """Corpus root from LIBRARIAN_CORPUS, or exit; there is no default.
 
-    DESIGN RATIONALE: a fallback to a checkout on the author's machine hands a
-    reproducer plausible numbers computed against the wrong tree. No default is
-    right, so there is none, and a missing or wrong value stops the run.
+    DESIGN RATIONALE: a default corpus path would hand a reproducer plausible
+    numbers computed against the wrong tree. No default is right, so there is
+    none, and a missing or wrong value stops the run.
     """
     value = os.environ.get("LIBRARIAN_CORPUS")
     if not value:
@@ -63,13 +74,10 @@ def require_corpus():
 CORPUS_DIR = require_corpus()
 
 # DESIGN RATIONALE: the file list comes from the archived scan committed beside
-# this script, not from ~/.librarian/similarity_report.json as before. That live
-# report has since been overwritten by a 2026-03-30 threshold-0.7 scan of 58,519
-# files, so the committed script no longer reads the index its published numbers
-# came from. The archived scan's `file_index` is element-for-element identical,
-# in the same order, to ~/.librarian/similarity_report_90pct.json (2026-03-14T13:10Z,
-# 31,634 entries), which is the index the original run consumed. Repointing here
-# restores that input rather than changing it.
+# this script, not from a live report under the tool's data directory, so the
+# input is pinned with the corpus. The archived scan's `file_index` is the index
+# of the 2026-03-14T13:10Z 90% scan that is the paper's primary analysis, 31,634
+# entries in stored order.
 SCAN = os.path.join(os.path.dirname(__file__), "scan_20260314_threshold90_skillonly.json")
 # The default output name carries today's UTC date, so a run on another day cannot overwrite
 # a tracked file; SCAN_RESULTS_OUT (a full path) overrides it.
@@ -88,10 +96,9 @@ def compute_minhash_with_seed(shingles, seed):
 def run_with_seed(files, seed):
     """Run clustering with a specific seed, return set of frozensets (clusters).
 
-    Also returns a tally of how each indexed file was resolved or skipped. The
-    tally exists because the previous `except Exception: continue` discarded
-    read failures without trace, which would let a corpus that half-resolves
-    look like a corpus that clusters loosely.
+    Also returns a tally of how each indexed file was resolved or skipped, so
+    that a corpus that half-resolves cannot look like a corpus that clusters
+    loosely.
     """
     lsh = MinHashLSH(threshold=THRESHOLD, num_perm=NUM_PERM)
 
@@ -181,7 +188,7 @@ def cluster_similarity(clusters_a, clusters_b):
             membership_b[item] = i
 
     # Find common items. Sorted and walked as a nested loop rather than
-    # materialised as a list of ~23 million tuples; the pair set, and therefore
+    # materialized as a list of ~23 million tuples; the pair set, and therefore
     # every count below, is identical either way.
     common = sorted(set(membership_a.keys()) & set(membership_b.keys()))
 
@@ -207,22 +214,19 @@ def cluster_similarity(clusters_a, clusters_b):
     n = a + b + c + d
     if n == 0:
         # Fewer than two files in common: agreement is undefined, not zero.
-        # The previous code returned a bare 0.0 here, which would also have
-        # raised on unpacking at the call site.
         return float("nan"), float("nan"), (a, b, c, d)
 
     # Rand Index
     ri = (a + b) / n
 
     # Adjusted Rand Index (Hubert-Arabie). The numerator counts `a` alone, so
-    # the term subtracted is E[a] = (a+c)(a+d)/n. The committed version
-    # subtracted E[a] + E[b], the expected count of all agreements, which does
-    # not match the numerator and drove the statistic to saturate at 1.0000.
+    # the term subtracted is E[a] = (a+c)(a+d)/n, not the expected count of all
+    # agreements E[a] + E[b].
     expected = (a + c) * (a + d) / n
     max_val = ((a + c) + (a + d)) / 2
     if max_val == expected:
         # Degenerate: both clusterings place every common pair the same way, so
-        # the index has no range to normalise over. Undefined, not zero --
+        # the index has no range to normalize over. Undefined, not zero:
         # returning 0.0 would read as chance-level agreement on a perfect match.
         return ri, float("nan"), (a, b, c, d)
     ari = (a - expected) / (max_val - expected)
@@ -233,9 +237,9 @@ def cluster_similarity(clusters_a, clusters_b):
 def self_test():
     """Check cluster_similarity against hand-computed pair counts.
 
-    Runs before the corpus work and exits the script non-zero on failure.
-    scikit-learn is not in this venv and is not to be installed, so the expected
-    values are derived by hand and written out beside each case.
+    Runs before the corpus work and exits the script non-zero on failure. The
+    expected values are derived by hand and written out beside each case, so
+    the check needs nothing beyond the standard library.
     """
     a3 = [{0, 1, 2}, {3, 4, 5}, {6, 7, 8}]
 
@@ -263,13 +267,13 @@ def self_test():
               f"expected (5, 22, 4, 5), 0.75, {2.5 / 7!r}", file=sys.stderr)
         return 1
 
-    # The uncorrected formula must not pass the case above: it subtracted
-    # E[a]+E[b] = (9*10 + 27*26)/36 = 22.0, giving (5-22)/(9.5-22) = 1.36,
-    # a value outside [-1, 1] for a clustering that agrees on three quarters of
-    # its pairs. Asserting the corrected value is what rules that form out.
+    # A formula that subtracts E[a]+E[b] = (9*10 + 27*26)/36 = 22.0 instead of
+    # E[a] gives (5-22)/(9.5-22) = 1.36 on the case above, outside [-1, 1] for
+    # a clustering that agrees on three quarters of its pairs. Asserting the
+    # value above rules that form out.
 
     # Degenerate: every common pair sits together in both clusterings, so the
-    # adjusted index has no range to normalise over.
+    # adjusted index has no range to normalize over.
     ri, ari, _ = cluster_similarity([{0, 1}, {0, 1, 2}], [{0, 1, 2}])
     if not (math.isclose(ri, 1.0) and math.isnan(ari)):
         print(f"self-test FAILED: degenerate case gave RI={ri}, ARI={ari}; "
@@ -278,12 +282,6 @@ def self_test():
 
     print("self-test passed: identical, hand-computed and degenerate cases all match.")
     return 0
-
-
-def tilde(path):
-    """Home-relative form of a path, so the artifact carries no user directory."""
-    home = os.path.expanduser("~")
-    return "~" + path[len(home):] if path.startswith(home) else path
 
 
 def corpus_provenance(root):
@@ -379,26 +377,36 @@ def write_results(scan, files, results, tallies, rows):
     resolved = tally["marketplace_path"] + tally["bare_path"]
 
     lines = [
-        "# MinHash seed robustness (90% threshold, SKILL.md only), corrected adjusted Rand index",
+        "# MinHash seed robustness (90% threshold, SKILL.md only)",
         "",
         f"Generated by `paper/sources/scans/{os.path.basename(__file__)}`. Rerun from the "
-        "repository root with:",
+        "repository root, with `LIBRARIAN_CORPUS` set:",
         "",
         "```",
-        f"LIBRARIAN_CORPUS={tilde(CORPUS_DIR)} \\",
-        f"  python paper/sources/scans/{os.path.basename(__file__)}",
+        f"python paper/sources/scans/{os.path.basename(__file__)}",
         "```",
+        "",
+        "This file reports, for each of five MinHash permutation seeds, the number of clusters, "
+        "files in clusters and distinct clustered files on the pinned March 2026 corpus, and the "
+        "Rand index and adjusted Rand index for every pair of seeds. It supports two statements in "
+        "Section 3.3 (Similarity Analysis) of the paper: \"Running the full analysis with five fixed "
+        "seeds (the library default, 1, and four arbitrary others: 42, 123, 456, 789) produced "
+        "cluster counts of 2,558 to 2,622; the default seed reproduces the archived scan exactly.\" "
+        "and, from a later sentence in the same paragraph, \"distinct clustered files moved from 7,061 to 6,935, "
+        "a 1.8% spread.\" Both come from the per-seed table below. The adjusted Rand index range "
+        "that same sentence quotes, 0.931 to 0.955, is computed over every file clustered under "
+        "either seed with the remainder as singletons; `recompute_ari.py` reports that population "
+        "as `ari_union` in `recompute-ari-results-20260907.json`. The pairwise table here scores "
+        "the files clustered under both seeds, which is that file's `ari_inter` population, and the "
+        "two agree on it.",
         "",
         f"Output defaults to `seed-robustness-<UTC date>.md`; set "
         "`SCAN_RESULTS_OUT` to a full path to write elsewhere instead of overwriting a "
         "previously dated results file.",
         "",
-        f"Input file list: `{os.path.basename(SCAN)}` ({len(files)} entries in `file_index`). "
-        "The original run read a local index file that no longer holds the March data; the "
-        "archived scan's "
-        "`file_index` is element-for-element identical, in the same order, to the "
-        "2026-03-14T13:10Z 90% report that the original run consumed, so this is the same input "
-        "restored rather than a different one.",
+        f"Input file list: `{os.path.basename(SCAN)}` ({len(files)} entries in `file_index`), "
+        "the archived 2026-03-14T13:10Z 90% scan that is the paper's primary analysis, read in "
+        "its stored order.",
         "",
         f"Seeds: {', '.join(str(s) for s in SEEDS)}. Similarity threshold: {THRESHOLD}. "
         f"MinHash permutations: {NUM_PERM}. Signatures are recomputed per seed; the clustering "
@@ -458,10 +466,10 @@ def write_results(scan, files, results, tallies, rows):
     # file states the breach, and main() fails on it.
     seed1_files = sum(len(c) for c in seed1)
     seed1_file_delta = 100.0 * (seed1_files - ARCHIVED_FILES_IN_CLUSTERS) / ARCHIVED_FILES_IN_CLUSTERS
-    unresolved = tally["missing"] + tally["short"] + tally["empty"] + tally["error"]
+    not_resolved = tally["missing"] + tally["short"] + tally["empty"] + tally["error"]
     baseline_breach = (abs(seed1_delta) > TOLERANCE_PCT
                        or abs(seed1_file_delta) > TOLERANCE_PCT
-                       or abs(seed1_files - ARCHIVED_FILES_IN_CLUSTERS) > unresolved)
+                       or abs(seed1_files - ARCHIVED_FILES_IN_CLUSTERS) > not_resolved)
     lead = (f"Seed {SEEDS[0]} is datasketch's default, and so is the configuration the scanner "
             f"itself runs under: `librarian/core.py` builds `MinHash(num_perm={NUM_PERM})` with no "
             f"explicit seed. It is therefore the seed the archived scan used, and it differs from "
@@ -469,21 +477,20 @@ def write_results(scan, files, results, tallies, rows):
             f"({seed1_delta:+.2f}%) and {abs(seed1_files - ARCHIVED_FILES_IN_CLUSTERS)} clustered "
             f"files ({seed1_file_delta:+.2f}%). ")
     if baseline_breach:
-        lead += (f"**That is more than the {unresolved} files this run could not resolve, or more "
+        lead += (f"**That is more than the {not_resolved} files this run could not resolve, or more "
                  f"than the {TOLERANCE_PCT:.0f}% tolerance, so the corpus under test is not the "
                  f"one the archived scan was built from and the absolute cluster counts here are "
                  f"not the paper's.** Compare the snapshot table above against the SHAs in "
                  f"`paper/supplementary/repository-commits.md`. The pairwise figures below remain "
-                 f"internally valid, because every seed is scored against this same file set.")
+                 f"internally valid, because every seed is measured against this same file set.")
     else:
-        lead += (f"The {unresolved} files this run could not resolve account for that difference, "
+        lead += (f"The {not_resolved} files this run could not resolve account for that difference, "
                  f"so the corpus under test is the March one.")
     lines += [
         "",
         lead + f" The wider spread at the other four seeds, up to "
-        f"{worst_delta:+.2f}% at seed {worst}, is the seed sensitivity this experiment exists to "
-        f"measure rather than drift in the input, and it is the reason the pairwise figures below "
-        f"are the result of interest, not the cluster totals.",
+        f"{worst_delta:+.2f}% at seed {worst}, is the seed sensitivity this experiment measures "
+        f"rather than a change in the input; the pairwise table below scores it directly.",
     ]
 
     lines += [
@@ -509,32 +516,22 @@ def write_results(scan, files, results, tallies, rows):
         lines.append(f"| {s1} vs {s2} | {common} | {a} | {b} | {c} | {d} | {ri:.4f} | {ari:.4f} |")
 
     if ari_values:
-        lines += ["", f"Corrected ARI over the {len(rows)} seed pairs: minimum "
+        lines += ["", f"Adjusted Rand index over the {len(rows)} seed pairs: minimum "
                       f"{min(ari_values):.4f}, maximum {max(ari_values):.4f}. "
-                      f"Rand index: minimum {min(ri_values):.4f}, maximum {max(ri_values):.4f}."]
+                      f"Rand index: minimum {min(ri_values):.4f}, maximum {max(ri_values):.4f}. "
+                      "Both are taken over the files clustered under both seeds; the "
+                      "union-population range the paper quotes is described at the top of this "
+                      "file."]
     else:
         lines += ["", "No defined ARI values were produced; every pair was degenerate or empty."]
-
-    lines += [
-        "",
-        "## Supersedes an earlier figure",
-        "",
-        "An earlier `ARI >= 0.9999` for this experiment, stated in three places, came from a "
-        "`cluster_similarity` that subtracted `E[a] + E[b]`, the expected "
-        "count of all agreements, from a numerator counting only `a`. The resulting statistic is "
-        "not the adjusted Rand index: it exceeds 1 as disagreement grows and saturates at 1.0000 "
-        "for anything up to roughly a hundred moved files at this corpus's shape. The values in "
-        "this file, computed with the Hubert-Arabie form on the pinned March corpus, supersede "
-        "it.",
-        "",
-    ]
+    lines.append("")
 
     with open(OUT, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
     print(f"\nWrote {OUT}")
     if baseline_breach:
         print(f"baseline differs from the archived scan by more than {TOLERANCE_PCT:.0f}% or by "
-              "more than the unresolvable files account for; the corpus is not the archived "
+              "more than the files that did not resolve account for; the corpus is not the archived "
               "scan's", file=sys.stderr)
         return 1
     return 0

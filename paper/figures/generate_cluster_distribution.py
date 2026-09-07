@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
 """Generate Figure 2 (cluster size distribution) for Section 4.1.
 
-Builds the committed figure from the archived
-`scan_20260314_threshold90_skillonly.json`, reading cluster sizes as len(locations)
-rather than hardcoding any series. Panel (a) is a log-y histogram over the bin edges
-the committed figure uses (2,3,4,5,6,8,10,15,20,30,50); panel (b) is a grouped log-y
-bar chart of cluster count by type over the size ranges 2, 3-5, 6-10, 11-20, 21-50.
-`generate_figures.py` makes Figures 1 and 3, not this one.
+Figure 2 in Section 4.1 (Ecosystem Characterization (RQ1)) is captioned "Cluster
+size distribution at 90% Jaccard threshold. (a) Size histogram; clusters of 20+ files
+represent 0.4% of all clusters. (b) Type breakdown by size." This script draws both
+panels from the archived 90% scan, taking each cluster's size as len(locations); no
+series is hardcoded. Panel (a) is a log-y histogram over the bin edges
+2,3,4,5,6,8,10,15,20,30,50; panel (b) is a grouped log-y bar chart of cluster count
+by type over the size ranges 2, 3-5, 6-10, 11-20, 21-50. After drawing, the script
+prints the bin and range counts and the share of clusters with 20+ files, which is
+the 0.4% figure in the caption. `generate_figures.py` makes Figures 1 and 3.
 
-Style note: this deliberately does NOT adopt generate_figures.py's serif / Okabe-Ito
-rcParams. The committed PDF was drawn with matplotlib's stock sans-serif defaults,
-tab10 colours and a full axes box; matching it keeps regeneration a no-op for the
-paper's appearance. Structure follows that script.
+Style: this script keeps matplotlib's stock sans-serif defaults, tab10 colors and a
+full axes box, and does not use the serif / Okabe-Ito rcParams of
+`generate_figures.py`. The figure in the paper was drawn with the stock defaults, so
+regenerating it changes nothing in the paper's appearance.
 
-Input: `../sources/scans/scan_20260314_threshold90_skillonly.json`. No corpus access,
-no network.
+Input: `paper/sources/scans/scan_20260314_threshold90_skillonly.json`, located
+relative to this script. No corpus access (LIBRARIAN_CORPUS is not needed), no
+network.
 
 Output: `cluster-distribution.pdf` and `cluster-distribution.png`, written beside this
-script unless --outdir says otherwise, so it runs from anywhere.
+script unless --outdir says otherwise, so it runs from any working directory.
 
 The PDF is byte-reproducible. matplotlib stamps a creation date into the PDF info
 dictionary unless SOURCE_DATE_EPOCH is set, so this module sets it from the scan's own
@@ -46,7 +50,7 @@ STEM = 'cluster-distribution'
 
 def scan_generated_at(path, probe_bytes=4096):
     """metadata.generated_at, read from the head of the scan rather than by
-    parsing all 45MB of it. The key sits in the file's first object."""
+    parsing the whole 13MB file. The key sits in the file's first object."""
     with path.open('r', encoding='utf-8') as fh:
         match = re.search(r'"generated_at"\s*:\s*"([^"]+)"', fh.read(probe_bytes))
     if not match:
@@ -69,8 +73,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-# Bin edges of panel (a) in the committed figure: unit-wide up to 6, then
-# widening, closing at 50 so the x axis ticks land on 10..50.
+# Bin edges of panel (a): unit-wide up to 6, then widening, closing at 50 so
+# the x axis ticks land on 10..50.
 BINS = [2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 50]
 # Panel (b) ranges, inclusive on both ends.
 RANGES = [('2', 2, 2), ('3-5', 3, 5), ('6-10', 6, 10),
@@ -79,7 +83,7 @@ TYPES = ['cross-marketplace', 'internal', 'scaffold']
 TYPE_COLORS = {'cross-marketplace': '#1f77b4', 'internal': '#ff7f0e',
                'scaffold': '#7f7f7f'}
 FIGSIZE = (6.9, 2.7)
-# The committed PDF's text is 0.75x matplotlib's stock 10pt; page box 496x194pt.
+# The paper's PDF has text at 0.75x matplotlib's stock 10pt; page box 496x194pt.
 FONT_SIZE = 7.5
 
 
@@ -183,11 +187,12 @@ def draw(scan, outdir):
     print(f'Panel (a) bin counts {bin_counts(sizes)}')
     for t in TYPES:
         print(f'Panel (b) {t}: {range_counts(by_type[t])}')
-    print(f'Clusters of 20+ files: {n} of {total} ({pct:.2f}%), caption says 0.4%')
+    print(f'Clusters of 20+ files: {n} of {total} ({pct:.2f}%); Figure 2 caption: 0.4%')
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Regenerate Figure 2.')
+    ap = argparse.ArgumentParser(
+        description='Regenerate Figure 2 (cluster size distribution, Section 4.1).')
     ap.add_argument('--outdir', default=str(HERE),
                     help='directory to write the PDF and PNG into '
                          '(default: paper/figures/, beside this script)')

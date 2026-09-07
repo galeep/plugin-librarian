@@ -3,10 +3,10 @@
 Corpus root: `$LIBRARIAN_CORPUS`
 Repository HEAD: `<private-history>`
 Input scan: `scan_20260314_threshold90_skillonly.json` (31634 indexed files).
-Command: `LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS python paper/sources/scans/backup_slug_check.py` from the repository root.
+Command: `python paper/sources/scans/backup_slug_check.py` from the repository root, with LIBRARIAN_CORPUS set.
 Generated: 2026-09-07 03:33:22Z.
 
-This check supports three statements in the paper. Section 3.2, Dataset Construction: "Before that test, the scanner had skipped any path containing `backup` (864 files, 780 of them one repository's backup directory)." Section 4.4, IOC Validation: "Of the 354 slugs, 2 were skipped by the backup-path filter ...; of the 352 scanned, 351 appeared in clusters (99.7% of those scanned; 99.2% against the full 354)." Section 6, Limitations: "the backup-path filter skipped 2 hightower6eu skills that, scanned, cluster only with each other."
+This file reports what the backup-path filter excluded from the clustering and supports three statements in the paper. Section 3.2, Dataset Construction: "Before that test, the scanner had skipped any path containing `backup` (864 files, 780 of them one repository's backup directory)." Section 4.4, IOC Validation: "Of the 354 slugs, 2 were skipped by the backup-path filter ...; of the 352 scanned, 351 appeared in clusters (99.7% of those scanned; 99.2% against the full 354)." Section 6, Limitations: "the backup-path filter skipped 2 hightower6eu skills that, scanned, cluster only with each other."
 
 What it measures: for every `SKILL.md` the filter excluded from `clawhub-archive`, whether the archived index returns any LSH candidate for it at threshold 0.9, and whether the cluster count and the hightower6eu recall move when the 2 skipped hightower6eu skills are scanned alongside the archived files.
 
@@ -42,17 +42,17 @@ Section 4.4 reports the recall as 351 of the 352 scanned, 99.7%, and 99.2% again
 
 Had the filter not applied, the same rule, which counts a slug as recalled when it appears in a similarity cluster whatever the cluster's other members are, gives **353 of 354** (99.7%). The percentage is 99.7% on either denominator.
 
-The pair's similarity is not a MinHash artefact. Their exact 3-word-shingle Jaccard, computed directly from the two shingle sets rather than estimated, is **0.9913** (1365 shingles shared of 1377 in the union; each file has 1371 and 1371 shingles). An independent recomputation of the same pair also gives 0.9913.
+The pair's similarity is not a MinHash artifact. Their exact 3-word-shingle Jaccard, computed directly from the two shingle sets rather than estimated, is **0.9913** (1365 shingles shared of 1377 in the union; each file has 1371 and 1371 shingles).
 
 ## The other 72 ClawHub backup-path files (query only, no greedy rerun)
 
-Of 72 files, **3** return at least one archived neighbour at threshold 0.9, and **1** of those have at least one neighbour in an account this study documented (the 18-account `study` ground truth from `file_level_precision.py`, applied with its `account_of`).
+Of 72 files, **3** return at least one archived neighbor at threshold 0.9, and **1** of those have at least one neighbor in an account this study documented (the 18-account `study` ground truth from `file_level_precision.py`, applied with its `account_of`).
 
-Both counts are LSH candidacy at threshold 0.9, not verified isolation. The banded LSH is a probabilistic filter with false negatives just under the threshold, so an empty row means no candidate was retrieved, not that no similar file exists; a full pairwise comparison would be needed to say the latter. A row with a neighbour, by contrast, is a positive finding: that file was a cluster member the filter removed. Rows are the marketplace-relative path under `clawhub-archive`.
+Both counts are LSH candidacy at threshold 0.9, not verified isolation. LSH is a probabilistic filter that can miss pairs just under the threshold, so an empty row means no candidate was retrieved, not that no similar file exists; a full pairwise comparison would be needed to say the latter. A row with a neighbor, by contrast, is a positive finding: that file was a cluster member the filter removed. Rows are the marketplace-relative path under `clawhub-archive`.
 
-Files whose neighbours reach an account this study documented: `skills/jacobo-create/backup-gog-20260213-121122/SKILL.md` has 11 neighbours at up to est. J 1.0000, reaching `zaycv`: the filter removed a file that would have joined a documented attacker's cluster, and the paper's published distinct-file counts do not include it.
+Files whose neighbors reach an account this study documented: `skills/jacobo-create/backup-gog-20260213-121122/SKILL.md` has 11 neighbors at up to est. J 1.0000, reaching `zaycv`: the filter removed a file that would have joined a documented attacker's cluster; the paper's distinct-file counts describe the corpus as scanned and do not include it.
 
-| path | account | neighbours | neighbour accounts in `study` | max est. Jaccard |
+| path | account | neighbors | neighbor accounts in `study` | max est. Jaccard |
 |---|---|---:|---:|---:|
 | `skills/adelpro/openclaw-backup-automation/SKILL.md` | adelpro | 0 | 0 | - |
 | `skills/aiwithabidi/workspace-backup/SKILL.md` | aiwithabidi | 0 | 0 | - |

@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""Regenerate Table 1 (corpus repositories) from the archived 90% scan.
+"""Recompute Table 1 (corpus repositories) from the archived 90% scan.
+
+Supports Table 1 in Section 3.2 (Dataset Construction), captioned "Repositories
+included in the corpus. File counts reflect SKILL.md files meeting the 100-character
+minimum after filtering."
 
 Counts files per `marketplace` value in the scan's `file_index`, pools every
 repository with fewer than 50 files into a single aggregate row, and compares the
-result row by row against Table 1 as printed in Section 3.2 (Dataset Construction). It
-never edits the tex: a disagreement is reported, not repaired.
+result row by row against Table 1 as printed. It never edits the paper: a disagreement
+is reported, not repaired.
 
-Input: `scan_20260314_threshold90_skillonly.json`, beside this script. No corpus
-access, no network, nothing randomised.
+Input: `scan_20260314_threshold90_skillonly.json`, beside this script. The script
+needs no corpus access and no network, and nothing in it is randomized.
 
 Output: `table1-marketplaces-20260907.md` beside this script, with a provenance header
 and the comparison table.
@@ -21,7 +25,7 @@ Self-test (before any real input): a toy file_index with counts 60, 50, 49 and 1
 exercises the strict `< 50` boundary, so the 50-file repository stays a named row and
 only the 49 and the 1 may be pooled.
 
-Run:
+Run from the repository root (LIBRARIAN_CORPUS is not needed):
   python paper/sources/scans/table1_marketplaces.py [--check]
 """
 import argparse
@@ -37,8 +41,9 @@ OUT = HERE / "table1-marketplaces-20260907.md"
 SMALL_THRESHOLD = 50
 HEAD_LINE_PREFIX = "- Repository HEAD at generation:"
 
-# Values as printed in paper/main-acm.tex, Table 1 (\label{tab:marketplaces}),
-# in the order they appear there. The pooled row and the total are compared too.
+# Values as printed in the paper, Table 1 (Repositories included in the corpus;
+# the tex source is not part of this artifact), in the order they appear there.
+# The pooled row and the total are compared too.
 TEX_ROWS = [
     ("clawhub-archive", 23654),
     ("claude-code-plugins-plus", 2396),
@@ -134,6 +139,12 @@ def build_report(scan, rows, extra, pooled, ordered_named):
     lines = [
         "# Table 1 (corpus repositories) recomputed from the archived 90% scan",
         "",
+        "This file reports the file count of every corpus repository, recomputed from"
+        " the archived scan, and compares each row against Table 1 as printed. It"
+        " supports Table 1 in Section 3.2 (Dataset Construction), captioned"
+        " \"Repositories included in the corpus. File counts reflect SKILL.md files"
+        " meeting the 100-character minimum after filtering.\"",
+        "",
         "## Provenance",
         "",
         f"- Input: `paper/sources/scans/{SCAN.name}`",
@@ -147,7 +158,7 @@ def build_report(scan, rows, extra, pooled, ordered_named):
         "Counts are files per `marketplace` value in the scan's `file_index`,"
         " which is the corpus after the 100-character minimum filter.",
         "",
-        "## Row-by-row comparison against Table 1 as published",
+        "## Row-by-row comparison against Table 1 as printed",
         "",
         render(rows),
         "",

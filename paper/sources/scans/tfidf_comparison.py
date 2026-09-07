@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """TF-IDF cosine-similarity baseline against the MinHash clustering.
 
-Backs Section 5.2 ("TF-IDF produced 3,170 clusters") and the TF-IDF bars of Figure 3.
-Vectorises each file, clusters greedily at 0.9 cosine similarity in batches, and scores
-precision and recall against the IOC account list under the same definitions as the
-MinHash run. Sparse matrix operations throughout, so there is no O(n^2) per-file pass.
+Supports the TF-IDF paragraph of Section 5.2, Comparison with Simple Baselines
+("TF-IDF produced 3,170 clusters covering 9,208 files (29.1%), with comparable
+recall (99.7%) but substantially lower precision"), and the TF-IDF bars of Figure 3
+("Similarity method comparison on 31,634 SKILL.md files"). The script vectorises
+each file, clusters greedily at 0.9 cosine similarity in batches, and scores
+precision and recall against the IOC account list under the definitions of
+Section 5.2. Sparse matrix operations throughout, so there is no O(n^2) per-file
+pass.
 
-Inputs. LIBRARIAN_CORPUS (required) names the pinned March corpus; see
+Inputs. LIBRARIAN_CORPUS (required) names the pinned corpus snapshot; see
 paper/supplementary/repository-commits.md. The file list is the `file_index` of
 `scan_20260314_threshold90_skillonly.json`, beside this script, resolved through
 `order_permutation.load_files` so this run and the order-permutation run see the same
@@ -15,16 +19,15 @@ files. Ground truth comes from `paper/iocs.json`. Parameters: 0.9 threshold,
 
 Decoding is selectable and it moves the totals. Eight indexed files are not valid
 UTF-8. `--decode strict` skips and lists them, clustering 31,626 documents, which is
-the population behind the paper's Section 5.2 figures. `--decode replace`, the
-default, substitutes U+FFFD and keeps all 31,634, giving 9,212 files in clusters
-rather than 9,208. Everything else matches under either mode.
+the population behind the Section 5.2 figures. `--decode replace`, the default,
+substitutes U+FFFD and keeps all 31,634, giving 9,212 files in clusters rather than
+9,208. Everything else matches under either mode.
 
 Output: `tfidf-comparison-<UTC date>.md` beside this script, or the full path in
 SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's file.
 
-To reproduce the Section 5.2 numbers:
-  LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS python \
-    paper/sources/scans/tfidf_comparison.py --decode strict
+To reproduce the Section 5.2 numbers, with LIBRARIAN_CORPUS set:
+  python paper/sources/scans/tfidf_comparison.py --decode strict
 """
 
 import argparse
@@ -48,9 +51,9 @@ from sklearn.preprocessing import normalize
 
 # Reused rather than reimplemented so this script and the order-permutation run
 # resolve the same file list from the same snapshot and describe it the same way.
-from order_permutation import git_head, load_files, provenance, require_corpus, tilde
+from order_permutation import git_head, load_files, provenance, require_corpus
 # Only for the equivalence check in check_attribution_rule(); the rule this
-# script scores with is get_author() below, unchanged from March.
+# script scores with is get_author() below.
 from file_level_precision import account_of
 
 CORPUS = Path(require_corpus())
@@ -65,12 +68,12 @@ OUT = Path(os.environ["SCAN_RESULTS_OUT"]) if os.environ.get("SCAN_RESULTS_OUT")
     else HERE / _DEFAULT_OUT_NAME
 
 THRESHOLD = 0.9
-MIN_CHARS = 100          # March filter: files shorter than this are skipped
+MIN_CHARS = 100          # files shorter than this are skipped
 BATCH_SIZE = 1000
 # Census bands around THRESHOLD, counted but never acted on. A pair inside a band
 # is one whose membership of a cluster would flip under a small change in the
-# feature set, which is the population any difference against the March run has
-# to come out of. Reported so "a handful of borderline pairs" is a measured
+# feature set, which is the population any difference against the paper's figures
+# has to come out of. Reported so "a handful of borderline pairs" is a measured
 # claim rather than an assertion. DESIGN RATIONALE for collecting pairs in a set
 # rather than incrementing a counter: a pair (i, j) is reachable from row i and
 # again from row j, so a counter double-counts every pair whose two endpoints
@@ -79,25 +82,26 @@ BATCH_SIZE = 1000
 CENSUS_BANDS = ((0.895, 0.905), (0.88, 0.92))
 
 # Figure 3's caption ("Wall-clock runtime (8-core i9-9880H)") and the Conclusion
-# ("on a single workstation (Intel i9-9880H") give the March
-# bench as an 8-core Intel i9-9880H with 64 GB. Recorded here so a rerun states
-# whether it is the same machine instead of leaving the runtime comparison to a
-# reader's assumption.
+# ("on a single workstation (Intel i9-9880H, 64 GB RAM)") give the paper's bench
+# as an 8-core Intel i9-9880H with 64 GB. Recorded here so a rerun states whether
+# it is the same machine instead of leaving the runtime comparison to a reader's
+# assumption.
 PAPER_MACHINE = ('Intel i9-9880H, 8 cores, 64 GB (Figure 3 caption and the '
                  'Conclusion; the caption reads "Wall-clock runtime (8-core i9-9880H)")')
 
-# The 11 accounts the published Section 5.2 figures were computed with. Kept as a
-# literal ONLY so the set read out of iocs.json can be checked against it; the run
-# uses the iocs.json set.
-MARCH_MALICIOUS_AUTHORS = frozenset({
+# The 11 accounts the Section 5.2 figures were computed with. Kept as a literal
+# ONLY so the set read out of iocs.json can be checked against it; the run uses
+# the iocs.json set.
+PAPER_MALICIOUS_AUTHORS = frozenset({
     "hightower6eu", "sakaen736jih", "thiagoruss0", "zaycv",
     "jordanprater", "stveenli", "anisafifi", "timclawbot",
     "kenblive", "mupengi-bot", "moonshine-100rze",
 })
 
-# Section 5.2 of the paper ("TF-IDF produced 3,170 clusters") and the hardcoded
-# TF-IDF bars of figures/generate_figures.py (the `p_at_20`, `p_at_10` and `runtime`
-# lists of `fig_method_comparison`), scored row by row below.
+# Section 5.2 ("TF-IDF produced 3,170 clusters covering 9,208 files (29.1%)")
+# and the hardcoded TF-IDF bars of figures/generate_figures.py (the `p_at_20`,
+# `p_at_10` and `runtime` lists of `fig_method_comparison`), checked row by row
+# below.
 PAPER = {
     "clusters": 3170,
     "files_in_clusters": 9208,
@@ -114,9 +118,10 @@ MINHASH_P20_PCT = 100.0
 MINHASH_P10_PCT = 78.9
 MINHASH_RUNTIME_S = 305
 
-# The companion run in the other decode mode, so each artifact can point at the
-# other instead of leaving a reader to guess why two file counts exist. Recorded
-# rather than recomputed: naming it costs one line, reproducing it costs a run.
+# The companion run in the other decode mode, so each results file can point at
+# the other instead of leaving a reader to guess why two file counts exist.
+# Recorded rather than recomputed: naming it costs one line, reproducing it costs
+# a run.
 RECORDED_RUNS = {
     "replace": {"date": "2026-09-07", "clusters": 3170, "files": 9212, "docs": 31634},
     "strict": {"date": "2026-09-07", "clusters": 3170, "files": 9208, "docs": 31626},
@@ -169,27 +174,28 @@ def load_malicious_authors():
 
     The rule is `set(iocs["clawhub_authors"])`: the 11 ClawHub accounts this
     study confirmed by payload inspection. That is neither of the two rules
-    file_level_precision.py reports -- it is not the Antiy CERT 12 ("strict")
-    and not their 18-account union ("study") -- so account_of's ground truth is
-    deliberately NOT imported. The published Section 5.2 precision figures were
-    computed with this set, so changing it here would change what is being
-    reproduced. The equality check below is what pins that: iocs.json is the
-    source, and the literal is kept only to prove the source agrees with it.
+    file_level_precision.py reports (the Antiy CERT 12, "strict", or their
+    18-account union, "study"), so account_of's ground truth is deliberately
+    NOT imported. The Section 5.2 precision figures were computed with this
+    set, so changing it here would change what is being reproduced. The
+    equality check below pins that: iocs.json is the source, and the literal is
+    kept only to prove the source agrees with it.
     """
     iocs = json.loads(IOCS.read_text())
     authors = frozenset(iocs["clawhub_authors"])
-    if authors != MARCH_MALICIOUS_AUTHORS:
+    if authors != PAPER_MALICIOUS_AUTHORS:
         raise ValueError(
-            "iocs.json clawhub_authors no longer matches the account set the March run "
-            f"used; only in iocs.json: {sorted(authors - MARCH_MALICIOUS_AUTHORS)}; "
-            f"only in the March literal: {sorted(MARCH_MALICIOUS_AUTHORS - authors)}")
+            "iocs.json clawhub_authors does not match the account set the Section 5.2 "
+            f"figures were computed with; only in iocs.json: "
+            f"{sorted(authors - PAPER_MALICIOUS_AUTHORS)}; only in the literal: "
+            f"{sorted(PAPER_MALICIOUS_AUTHORS - authors)}")
     return authors
 
 
 def check_attribution_rule(entries):
     """Confirm get_author agrees with file_level_precision.account_of on this scan.
 
-    The two differ as functions: get_author accepts a ClawHub path of three or
+    The two differ as functions: get_author takes a ClawHub path of three or
     more segments, account_of requires four. Reported rather than silently
     assumed, because a reader comparing this file's precision figures against
     file-level-precision-*.md needs to know whether the attribution rule is the
@@ -201,7 +207,8 @@ def check_attribution_rule(entries):
 
 
 def build_matrix(texts):
-    """TF-IDF matrix with the March settings, L2-normalised so dot == cosine."""
+    """TF-IDF matrix with the Section 5.2 settings (50,000 features, 1-3-grams,
+    sublinear TF), L2-normalised so dot == cosine."""
     vectorizer = TfidfVectorizer(
         max_features=50000,
         ngram_range=(1, 3),
@@ -223,8 +230,8 @@ def load_corpus(scan, decode):
     `decode` is "strict" or "replace". DESIGN RATIONALE: this is the one place
     where a choice silently changes the document set rather than the inputs.
     Eight file_index entries are not valid UTF-8. "strict" skips and lists them,
-    vectorising 31,626 documents, which is the population behind the published
-    Section 5.2 figures; "replace" keeps all 31,634 by substituting U+FFFD.
+    vectorising 31,626 documents, which is the population behind the Section 5.2
+    figures; "replace" keeps all 31,634 by substituting U+FFFD.
     The skipped paths are returned rather than only counted, because which files
     left the corpus is the whole point of offering the choice.
     """
@@ -264,9 +271,9 @@ def load_corpus(scan, decode):
 def cluster_tfidf_batched(texts, threshold):
     """Cluster using TF-IDF with batched sparse cosine similarity.
 
-    The greedy first-match loop is the March one. Timing is now split three
-    ways: vectorising, the sparse similarity products, and the thresholding and
-    assignment loop.
+    Greedy first-match, as in Section 5.2 ("the same greedy first-match
+    algorithm"). Timing is split three ways: vectorising, the sparse similarity
+    products, and the thresholding and assignment loop.
     """
     print("Building TF-IDF matrix...", flush=True)
     t0 = time.time()
@@ -327,7 +334,7 @@ def cluster_tfidf_batched(texts, threshold):
 
 
 def evaluate_clusters(clusters, metadata, malicious):
-    """Cluster-level precision by size and hightower6eu recall. March definitions.
+    """Cluster-level precision by size and hightower6eu recall, as in Section 5.2.
 
     Precision at size s: of the clusters with at least s files, the share holding
     at least one file whose ClawHub account is in `malicious`. Recall: the share
@@ -464,17 +471,17 @@ def mode_note(decode, n_texts, n_index):
 
     DESIGN RATIONALE: the two modes differ by four numbers out of eight and by
     eight documents out of 31,634, which is exactly the size of difference a
-    reader skims past. Each artifact therefore says which mode it is, what the
-    other mode gave, and which of the two reproduces the paper.
+    reader skims past. Each results file therefore says which mode it is, what
+    the other mode gave, and which of the two reproduces the paper.
     """
     other = "replace" if decode == "strict" else "strict"
     o = RECORDED_RUNS[other]
     if decode == "strict":
         head = (f"**This is the `--decode strict` run, and it reproduces the paper's "
-                f"March configuration.** Files that are not valid UTF-8 never entered "
-                f"the March corpus, so this run vectorises {n_texts:,} documents rather "
-                f"than the {n_index:,} the scan indexes; the eight excluded files are "
-                f"listed under Provenance below.")
+                f"configuration.** Files that are not valid UTF-8 are not part of the "
+                f"population behind the Section 5.2 figures, so this run vectorises "
+                f"{n_texts:,} documents rather than the {n_index:,} the scan indexes; "
+                f"the eight excluded files are listed under Provenance below.")
         tail = (f"A `--decode replace` run of {o['date']} over all {o['docs']:,} "
                 f"documents gave {o['clusters']:,} clusters over {o['files']:,} files, "
                 f"with identical precision and recall. "
@@ -485,10 +492,10 @@ def mode_note(decode, n_texts, n_index):
         head = (f"**This is the `--decode replace` run, the script's default.** It keeps "
                 f"every one of the {n_texts:,} indexed files by substituting U+FFFD for "
                 f"undecodable bytes, which is not the population behind the published figures.")
-        tail = (f"The `--decode strict` run of {o['date']} reproduces March by skipping "
-                f"the eight files that are not valid UTF-8, over {o['docs']:,} documents, "
-                f"and gives {o['clusters']:,} clusters over {o['files']:,} files, matching "
-                f"the paper exactly. "
+        tail = (f"The `--decode strict` run of {o['date']} reproduces the paper's "
+                f"configuration by skipping the eight files that are not valid UTF-8, "
+                f"over {o['docs']:,} documents, and gives {o['clusters']:,} clusters "
+                f"over {o['files']:,} files, matching the paper exactly. "
                 f"**Use `--decode strict` to reproduce Section 5.2.**")
     return [head, "", tail, ""]
 
@@ -542,24 +549,26 @@ def build_report(scan, texts, metadata, skipped, dropped, clusters, timings,
     rows, memberships, distinct = comparison_rows(
         clusters, metadata, texts, timings, precision, recall, h6_found, h6_total)
     n = len(texts)
-    env_corpus = os.environ.get("LIBRARIAN_CORPUS")
-    prefix = f"LIBRARIAN_CORPUS={tilde(env_corpus)} " if env_corpus else ""
+    this_machine = machine()
     # The flag is always printed, including for the default, so a copied command
     # cannot silently reproduce the other mode's file count.
-    command = (f"{prefix}python paper/sources/scans/{Path(__file__).name} "
+    command = (f"python paper/sources/scans/{Path(__file__).name} "
                f"--decode {decode}")
 
     lines = [
         "# TF-IDF cosine-similarity baseline (0.9 cosine, SKILL.md only)", "",
+        "This file reports the TF-IDF baseline of Section 5.2, Comparison with Simple "
+        'Baselines: "TF-IDF produced 3,170 clusters covering 9,208 files (29.1%), with '
+        "comparable recall (99.7%) but substantially lower precision: P@≥20 dropped "
+        "to 75.0% (15/20) and P@≥10 to 41.1% (30/73), compared to MinHash's 100% "
+        '(P@≥20) and 78.9% (P@≥10). Runtime was 465 s versus 305 s for MinHash '
+        '(both wall time)." It also supports the TF-IDF bars of Figure 3 ("Similarity '
+        'method comparison on 31,634 SKILL.md files").', "",
         f"Generated by `{Path(__file__).name}`; rerun with `{command}` from the "
-        "repository root. Output defaults to today's UTC date; set "
-        "`SCAN_RESULTS_OUT` to a full path to write elsewhere.",
+        "repository root with `LIBRARIAN_CORPUS` set. Output defaults to today's UTC "
+        "date; set `SCAN_RESULTS_OUT` to a full path to write elsewhere.",
         f"Input file list: `{SCAN.name}` `file_index`. File contents: the corpus "
         "root below. Ground truth: `paper/iocs.json` `clawhub_authors`.", "",
-        "This supersedes the original run, which read its file list from a local index "
-        "file and its contents from an unpinned checkout. Neither input survives, so "
-        "the numbers in Section 5.2 of the paper had no reproducible artifact until "
-        "this run.", "",
     ] + mode_note(decode, len(texts), len(scan["file_index"])) + [
         "## Provenance", "",
     ]
@@ -568,7 +577,7 @@ def build_report(scan, texts, metadata, skipped, dropped, clusters, timings,
         "| item | value |", "|---|---|",
         f"| Python | {sys.version.split()[0]} |",
         f"| scikit-learn | {sklearn.__version__} |",
-        f"| machine | {machine()} |",
+        f"| machine | {this_machine} |",
         f"| March bench (paper) | {PAPER_MACHINE} |",
         f"| load average at finish (1/5/15 min) | {load_average()} |",
         f"| paper repository HEAD | {git_head(HERE.parents[2])} |",
@@ -579,11 +588,9 @@ def build_report(scan, texts, metadata, skipped, dropped, clusters, timings,
         f"| threshold and greedy assignment | {timings['cluster']:.1f} s |",
         f"| **total** | **{timings['total']:.1f} s** |",
         "",
-        "**No scikit-learn version is recorded for the March run.** "
-        "`pyproject.toml` does not list scikit-learn as a dependency at all, "
-        "the March working notes do not mention it, the paper does not cite "
-        "it, and no version is recorded for the published run. The version above is the "
-        "only one on record for any run of this script, so any TF-IDF difference "
+        "The paper does not record the scikit-learn version behind its TF-IDF "
+        "figures, and `pyproject.toml` does not list scikit-learn as a dependency. "
+        "The version above is the one this run used, so a TF-IDF difference "
         "attributable to a library change cannot be bounded from this repository.", "",
         f"Files: {len(texts)} of {len(scan['file_index'])} scan entries loaded with "
         f"`--decode {decode}`; {skipped['missing']} could not be read from the "
@@ -591,8 +598,8 @@ def build_report(scan, texts, metadata, skipped, dropped, clusters, timings,
         f"{skipped['short']} were shorter than {MIN_CHARS} characters.",
         "",
         "Decoding is the one input that changes the document set silently. Under "
-        "`--decode strict`, files that are not valid UTF-8 never enter the corpus, "
-        "which is the population behind the published figures; `--decode "
+        "`--decode strict`, files that are not valid UTF-8 never enter the document "
+        "set, which is the population behind the Section 5.2 figures; `--decode "
         "replace` keeps them by substituting U+FFFD. Files dropped as undecodable "
         + (f"({skipped['undecodable']}):" if skipped["undecodable"] else
            "under this mode: none.")]
@@ -601,8 +608,8 @@ def build_report(scan, texts, metadata, skipped, dropped, clusters, timings,
     lines += [
         "",
         f"Ground truth: the {len(malicious)} accounts in `iocs.json` "
-        "`clawhub_authors`, checked at startup against the account set the published "
-        "figures used. A cluster counts as a true positive if at least "
+        "`clawhub_authors`, checked at startup against the account set the Section "
+        "5.2 figures were computed with. A cluster counts as a true positive if at least "
         "one of its files sits under one of those accounts in the ClawHub archive "
         "(`skills/<account>/...`). Recall is the share of `hightower6eu` files "
         "that landed in any cluster; it is not corpus-wide recall.",
@@ -610,9 +617,9 @@ def build_report(scan, texts, metadata, skipped, dropped, clusters, timings,
     ]
     if rule_agrees:
         lines += [
-            "The attribution rule here (`get_author`, unchanged from March) accepts a "
-            "ClawHub path of three or more segments; `file_level_precision.account_of` "
-            "requires four. On this scan the two agree on all "
+            "The attribution rule here (`get_author`) takes a ClawHub path of three "
+            "or more segments; `file_level_precision.account_of` requires four. On "
+            "this scan the two agree on all "
             f"{len(scan['file_index'])} entries, so the precision figures below are "
             "comparable with `file-level-precision-*.md` under its `clawhub_authors` "
             "candidate row.", ""]
@@ -624,10 +631,11 @@ def build_report(scan, texts, metadata, skipped, dropped, clusters, timings,
             f"First disagreements: {[e['path'] for e in rule_bad[:5]]}.", ""]
 
     lines += [
-        "## Against the published Section 5.2 numbers", "",
-        'Paper source: Section 5.2 ("TF-IDF produced 3,170 clusters"), and the hardcoded '
-        "TF-IDF bars in `paper/figures/generate_figures.py`, the `p_at_20`, `p_at_10` "
-        "and `runtime` lists of `fig_method_comparison`.", "",
+        "## Against the Section 5.2 numbers", "",
+        'Paper source: Section 5.2 ("TF-IDF produced 3,170 clusters covering 9,208 '
+        'files (29.1%)"), and the hardcoded TF-IDF bars in '
+        "`paper/figures/generate_figures.py`, the `p_at_20`, `p_at_10` and `runtime` "
+        "lists of `fig_method_comparison`.", "",
         "| quantity | paper | this run | match |", "|:--|--:|--:|:--|",
     ]
     lines += [f"| {label} | {paper} | {got} | {ok} |" for label, paper, got, ok in rows]
@@ -637,7 +645,7 @@ def build_report(scan, texts, metadata, skipped, dropped, clusters, timings,
         f"cluster, so memberships and distinct files are equal by construction "
         f"({memberships:,} either way). "
         + (f"The paper's {PAPER['files_in_clusters']:,} therefore matches both "
-           "readings, and no ambiguity in the paper's sentence needs resolving."
+           "readings."
            if memberships == PAPER["files_in_clusters"] else
            f"The paper's {PAPER['files_in_clusters']:,} matches NEITHER reading "
            f"of this run, which differs by {memberships - PAPER['files_in_clusters']:+,} "
@@ -645,14 +653,10 @@ def build_report(scan, texts, metadata, skipped, dropped, clusters, timings,
            "the two readings cannot be what separates them.")
         + f" The share is that count over the {n:,} files loaded.",
         "",
-        f"The paper's {PAPER['files_in_clusters']:,} was not produced under the "
-        "conditions above. It was produced on an unpinned checkout, not the snapshot "
-        "SHAs; under a scikit-learn version that "
-        "is recorded nowhere in this repository; and under strict UTF-8 decoding, "
-        "which dropped the eight indexed files that are not valid UTF-8 and left "
-        "March with 31,626 documents rather than 31,634. Any row above that does "
-        "not match has to be read against all three of those differences, and only "
-        "the third of them can be reproduced from here.",
+        "A row above that does not match has to be read against the scikit-learn "
+        "version, which the paper does not record, and against the decode mode "
+        "named at the top of this file; the decode mode is reproduced by "
+        "`--decode strict`, the library version is not fixed by this repository.",
         "",
         "Near-threshold census, counting DISTINCT unordered pairs among those the "
         "greedy loop actually examined (a pair reachable from both of its endpoints "
@@ -661,13 +665,18 @@ def build_report(scan, texts, metadata, skipped, dropped, clusters, timings,
                     for b, (lo, hi) in enumerate(CENSUS_BANDS))
         + ". These are the pairs whose cluster membership would flip under a small "
         "change to the feature set, so they bound how much of a difference against "
-        "the March run a knife-edge effect can explain.",
+        "the paper's figures a knife-edge effect can explain.",
         "",
-        "Runtime carries no match verdict. The CPU is the same model the paper "
-        f"benched on ({PAPER_MACHINE}), but this run shared its CPU with unrelated "
-        "work at the load average recorded above, and the published figure records no "
-        "load. The three-way split is recorded so a rerun on an unloaded machine can "
-        "compare like with like.",
+        "Runtime carries no match verdict. "
+        + ("The CPU is the same model the paper "
+           f"benched on ({PAPER_MACHINE}), but this run ran at the load average "
+           "recorded above, and the paper records no load for its figure."
+           if "i9-9880H" in this_machine else
+           f"This run's CPU ({this_machine}) is not the model the paper benched on "
+           f"({PAPER_MACHINE}), so the wall-clock figures are not comparable.")
+        + " The three-way "
+        "split is recorded so a rerun on an unloaded machine can compare like with "
+        "like.",
         "",
         "## Full precision profile", "",
         "| minimum cluster size | clusters | with a malicious file | precision |",
@@ -707,9 +716,8 @@ def parse_args(argv=None):
         "--decode", choices=("strict", "replace"), default="replace",
         help="How to decode corpus files. 'replace' (default) substitutes U+FFFD "
              "for undecodable bytes and keeps every indexed file. 'strict' skips "
-             "and lists files that are not valid UTF-8, reproducing the March "
-             "script, which read with strict UTF-8 inside a bare except and so "
-             "clustered 31,626 documents rather than 31,634.")
+             "and lists files that are not valid UTF-8, clustering the 31,626 "
+             "documents behind the Section 5.2 figures rather than 31,634.")
     return ap.parse_args(argv)
 
 
@@ -731,7 +739,7 @@ def main(args) -> int:
     # over a different document set while still looking well-formed. That is a
     # failed run, not a footnote, so it stops here. Undecodable files are NOT
     # covered by this ceiling: under --decode strict they are an expected,
-    # enumerated part of reproducing the March corpus.
+    # enumerated part of reproducing the paper's document set.
     if skipped["missing"]:
         print(f"{skipped['missing']} indexed path(s) missing from {CORPUS}; the "
               f"corpus is not the one {SCAN.name} was built from. First few: "

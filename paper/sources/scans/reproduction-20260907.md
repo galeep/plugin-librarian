@@ -1,39 +1,66 @@
-# Corpus-reading scripts run on the pinned March corpus (2026-09-07)
+# Reproduction run of the scan scripts (2026-09-07)
+
+This file records one run, on 2026-09-07, of the five scripts in `paper/sources/scans/` that
+recompute the paper's clustering figures from the pinned corpus and the archived scans:
+`cluster_gap_recompute.py`, `seed_robustness.py`, `order_permutation.py`,
+`file_level_precision.py` and `table2_distinct_files.py --check`. Sections a to e give each
+script's figures as printed. Four of the scripts also write a results file beside this one
+(`seed-robustness-20260907.md`, `order-permutation-20260907.md`,
+`file-level-precision-20260907.md`, `table2-distinct-files-20260907.md`);
+`cluster_gap_recompute.py` reports on stdout only, so section a is its record.
+
+Paper statements each section supports:
+
+- Section a. Section 3.3 (Similarity Analysis): "the default seed reproduces the archived scan
+  exactly." Section 4.1 (Ecosystem Characterization (RQ1)): "At a 90% Jaccard similarity
+  threshold, 2,622 clusters held 7,147 memberships over 7,061 distinct SKILL.md files, 22.3% of
+  the 31,634 indexed; clusters may overlap, so memberships exceed files."
+- Section b. Section 3.3: "Running the full analysis with five fixed seeds (the library default,
+  1, and four arbitrary others: 42, 123, 456, 789) produced cluster counts of 2,558 to 2,622; the
+  default seed reproduces the archived scan exactly." and, from the same paragraph,
+  "distinct clustered files moved from 7,061 to 6,935, a 1.8% spread."
+- Section c. Section 3.3: "Permuting the assignment order (10 shuffles, signatures fixed) gave
+  adjusted Rand index scores of 0.982 to 0.992 over the files clustered under both orderings, so
+  ordering perturbs membership only at the margin."
+- Section d. Section 4.4 (IOC Validation): "File-level precision, promised in Section 3.4, is
+  305 of 307 files (0.993) at ≥ 20; at ≥ 10 the corresponding figure is membership-level, 557 of
+  682 memberships over 643 distinct files, 0.817 (per-cluster results are among the files
+  released with the code, Appendix C)." and the Table 4 caption in the same section: "Only the
+  ≥ 20 and ≥ 10 rows reproduce from the released ground truth."
+- Section e. Table 2 ("Threshold sensitivity on 31,634 SKILL.md files", Section 4.1), whose
+  *Files* column is the *distinct* column of section e.
 
 ## Provenance
 
 - Corpus root: `$LIBRARIAN_CORPUS`
-- Step 0 verification: every row of the three tables in `paper/supplementary/repository-commits.md`
-  (1 Primary Archive + 34 Community Marketplace + 24 Curated Sub-Repositories = 59 rows) has a
-  worktree under the corpus root whose `git rev-parse HEAD` starts with the recorded SHA, and
-  `git status --porcelain` is empty for every row except `clawhub-archive`, which shows exactly 28
-  modified files (the expected macOS case-collision artifact). 0 mismatches. Result: PASS.
+- Corpus verification, run before the scripts: every row of the three tables in
+  `paper/supplementary/repository-commits.md` (1 Primary Archive + 34 Community Marketplace + 24
+  Curated Sub-Repositories = 59 rows) has a worktree under the corpus root whose
+  `git rev-parse HEAD` starts with the recorded SHA, and `git status --porcelain` is empty for
+  every row except `clawhub-archive`, which shows exactly 28 modified files (that commit holds
+  path pairs that differ only by case, so a checkout on a case-insensitive filesystem
+  reports the second of each pair as modified; no file in the scan index is affected).
+  0 mismatches. Result: PASS.
 - Python: 3.13.5
 - datasketch: 1.8.0
-- Repo git HEAD at time of these runs: `<private-history>`, a commit in the
-  authors' private drafting repository that cannot be resolved from this one
-- Exact commands:
+- Repository commit at the time of these runs: `<private-history>`
+- Commands, run from the repository root with `LIBRARIAN_CORPUS` set:
 
 ```
-LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS \
-  CLUSTER_GAP_OUT=out \
-  python paper/sources/scans/cluster_gap_recompute.py
-
-LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS \
-  python paper/sources/scans/seed_robustness.py
-
-LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS \
-  python paper/sources/scans/order_permutation.py
-
-LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS \
-  python paper/sources/scans/file_level_precision.py
-
+CLUSTER_GAP_OUT=out python paper/sources/scans/cluster_gap_recompute.py
+python paper/sources/scans/seed_robustness.py
+python paper/sources/scans/order_permutation.py
+python paper/sources/scans/file_level_precision.py
 python paper/sources/scans/table2_distinct_files.py --check
 ```
 
 All five commands exited 0. No tolerance guard fired.
 
 ## a. `cluster_gap_recompute.py`
+
+Figures as printed on stdout. The script rebuilds the default-seed 90% clustering from the
+corpus files and diffs it against the archived scan; an exact reproduction prints zero for
+every row from "clusters only in archive" down.
 
 | metric | value |
 |---|---:|
@@ -82,8 +109,14 @@ Pairwise ARI (Hubert-Arabie), 10 seed pairs:
 ARI range: minimum 0.9491 (456 vs 789), maximum 0.9699 (1 vs 123). Rand index range: minimum
 0.9999 (456 vs 789), maximum 1.0000.
 
-Seed-1 (default) baseline differs from the archived scan by +0.00% clusters, with 0 unresolved
-files. `TOLERANCE_PCT` (1.0%) was not breached.
+These pairwise values score the files clustered under both seeds. The adjusted Rand index range
+the paper quotes for this experiment, 0.931 to 0.955, is computed over every file clustered under
+either seed, with the remainder as singletons; `recompute_ari.py` reports that population as
+`ari_union` in `recompute-ari-results-20260907.json`, and the `ari_inter` values in the same file
+are the ones tabulated above.
+
+The seed-1 (default) baseline differs from the archived scan by +0.00% clusters, and 0 indexed
+files were missing under the corpus root. `TOLERANCE_PCT` (1.0%) was not breached.
 
 ## c. `order_permutation.py`
 
@@ -127,8 +160,8 @@ Corpus-independent figures (read the archived scan and `iocs.json`, never the fi
 | study precision, >=10 | 557/682 = 0.817 |
 | content precision, >=10 | 559/682 = 0.820 |
 
-The `>= 20` and `>= 10` rows matched Table 4 under the `study` definition; the STOP guard did not
-fire (exit 0).
+The cluster-level true positives at `>= 20` and `>= 10` under the `study` definition match the
+corresponding rows of Table 4 (Section 4.4), so the script's STOP guard did not fire (exit 0).
 
 Exploratory content-marker column, which does read the corpus:
 
@@ -141,8 +174,9 @@ Exploratory content-marker column, which does read the corpus:
 | `clawdhub.com`-driven content-only files, all clusters | 31 of 44 |
 
 Every corpus worktree resolves, so no location is unreadable. The all-clusters content-only count
-is 31 of 44 (`file-level-precision-20260907.md` line 12); those files sit in clusters below size 5
-and fall outside every threshold this report cites.
+is 31 of 44 (the content-match paragraph under Definitions in `file-level-precision-20260907.md`);
+that file's per-threshold sections report 0 `clawdhub.com`-only files in the `>= 20` set and 0 in
+the `>= 10` set, so the two figures the paper quotes carry none of them.
 
 ## e. `table2_distinct_files.py --check`
 
@@ -158,4 +192,4 @@ No corpus access. Self-test passed. Recomputed table matched the committed
 | 90% | 2,622 | 7,147 | 7,061 |
 | 95% | 2,409 | 6,547 | 6,509 |
 
-This script has no dependence on the corpus, only on the archived scans.
+This script depends only on the six archived scans, not on the corpus.

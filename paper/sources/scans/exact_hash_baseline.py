@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
-"""Exact SHA-256 deduplication baseline for Section 5.2, in three variants.
+"""Exact SHA-256 deduplication baseline of Section 5.2, in three variants.
 
-Recomputes the exact-hash baseline of Section 5.2 (1,946 duplicate groups, 71
-containing a known malicious account, 95.4% file recall for the two primary campaign
-accounts) from the archived scan's `file_index` against a pinned corpus snapshot, and
-adds two variants for comparison:
+Recomputes the exact-hash baseline that Section 5.2 (Comparison with Simple Baselines)
+reports: "SHA-256 hashing all 31,634 SKILL.md files produces 1,946 duplicate groups. Of
+these, 71 (3.6%) contain known malicious authors. Hash-based recall for the two primary
+campaign authors' skills is 95.4% (538 of 564 files share at least one exact duplicate),
+compared to MinHash clustering's 98.8%." The recompute hashes every file listed in the
+archived scan's `file_index` against the pinned corpus snapshot and adds two variants:
   raw      whole file bytes; the paper's baseline
   nofm     leading YAML frontmatter stripped first
   clawhub  raw, restricted to clawhub-archive
-The ground-truth rules the paper leaves implicit are stated in full in the output file,
-along with every other definition inferred here.
+The output file states every definition the recompute applies (hashed unit, group,
+malicious group, the 564, the 538 and the 26, the 96.4%, the 11) and cross-checks each
+Section 5.2 figure against the recomputed value.
 
-Inputs. LIBRARIAN_CORPUS (required) names the pinned March corpus; see
-paper/supplementary/repository-commits.md. Also
-`scan_20260314_threshold90_skillonly.json` and `paper/iocs.json`, both beside or above
-this script.
+Inputs. LIBRARIAN_CORPUS (required) names the pinned corpus snapshot; the marketplace
+commits are recorded in paper/supplementary/repository-commits.md. Also read:
+`scan_20260314_threshold90_skillonly.json` beside this script and `paper/iocs.json`.
 
-Output: `exact-hash-baseline-<UTC date>.md` beside this script, or the full path in
-SCAN_RESULTS_OUT. It is written BEFORE the cross-check against the published figures,
-so a failing run still leaves its output on disk for inspection: trust the exit status,
-not the presence of the file.
+Output: `exact-hash-baseline-YYYYMMDD.md` (UTC date) beside this script, or the full
+path in SCAN_RESULTS_OUT. The file is written BEFORE the cross-check against the
+published figures, so a failing run still leaves its output on disk for inspection:
+trust the exit status, not the presence of the file.
 
-Run:
-  LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS python paper/sources/scans/exact_hash_baseline.py
+Run, with LIBRARIAN_CORPUS set:
+  python paper/sources/scans/exact_hash_baseline.py
 """
 import collections, datetime, hashlib, json, os, sys, tempfile, time
 from pathlib import Path
@@ -41,7 +43,8 @@ OUT = Path(os.environ["SCAN_RESULTS_OUT"]) if os.environ.get("SCAN_RESULTS_OUT")
     else HERE / _DEFAULT_OUT_NAME
 
 PRIMARY = frozenset({"hightower6eu", "sakaen736jih"})
-# Published Section 5.2 / baseline-comparisons.md figures, checked at the end of the run.
+# Section 5.2 figures (also tabulated in paper/sources/baseline-comparisons.md),
+# checked against the recomputed values at the end of the run.
 PAPER = {"files": 31634, "unique": 28264, "groups": 1946, "in_groups": 5316,
          "mal_groups": 71, "mal_pct": 3.6, "fp_pct": 96.4, "primary": 564,
          "primary_hashes": 75, "recall_files": 538, "recall_pct": 95.4, "missed": 26,
@@ -92,8 +95,8 @@ def group_by_hash(root, entries, strip=False, marketplace=None):
 def analyse(groups, entries, study, marketplace=None):
     """Every figure Section 5.2 quotes, for one hashing variant. A group is two or
     more files sharing one digest; singletons are not groups. The malicious set is
-    defined over scan entries, not over files that resolved on disk, so an
-    unresolvable malicious file counts as missed rather than leaving the denominator."""
+    defined over scan entries, not over files that resolved on disk, so a malicious
+    file absent from the corpus tree counts as missed rather than leaving the denominator."""
     dup = {h: v for h, v in groups.items() if len(v) > 1}
     in_dup = {(e["marketplace"], e["path"]) for v in dup.values() for e in v}
     primary = [e for e in entries if account_of(e) in PRIMARY
@@ -224,15 +227,27 @@ def main() -> int:
                           for n in variants)
     OUT.write_text(f"""# Exact SHA-256 Deduplication Baseline (Section 5.2 recompute)
 
-Recompute of the Section 5.2 exact-hash baseline, which the paper reports with no script and no
-archived result, plus two additional variants. March hand record: `paper/sources/baseline-comparisons.md`.
+This file reports the exact-hash deduplication baseline of Section 5.2 (Comparison with Simple
+Baselines), recomputed from the archived scan's `file_index` against the pinned corpus snapshot,
+plus two variants (frontmatter stripped; clawhub-archive only). It supports these Section 5.2
+sentences: "SHA-256 hashing all 31,634 SKILL.md files produces 1,946 duplicate groups. Of these,
+71 (3.6%) contain known malicious authors. Hash-based recall for the two primary campaign authors'
+skills is 95.4% (538 of 564 files share at least one exact duplicate), compared to MinHash
+clustering's 98.8%. The 26 files missed by exact hashing (4.6% of the 564) fall into four groups:
+ten differ in version strings, formatting, or a payload URL; eight lack the payload block; seven
+are distinct skills by the same accounts; one differs only in frontmatter." and "An operator
+triaging exact-hash duplicate groups faces a 96.4% false positive rate across 1,946 groups."
+The same figures are tabulated in `paper/sources/baseline-comparisons.md`.
+
+Written by `paper/sources/scans/exact_hash_baseline.py`, which reads the scan named below, the
+corpus tree that LIBRARIAN_CORPUS names, and `paper/iocs.json`; run it with LIBRARIAN_CORPUS set.
 
 ## Provenance
 
-- Corpus root: `{tilde(CORPUS)}`
+- Corpus root: `$LIBRARIAN_CORPUS`
 - Scan: `{SCAN.name}`, `generated_at` {scan["metadata"]["generated_at"]}
 - Repository HEAD: {git_head(HERE.parents[2])}
-- Command: `LIBRARIAN_CORPUS={tilde(CORPUS)} python paper/sources/scans/{Path(__file__).name}`
+- Command: `python paper/sources/scans/{Path(__file__).name}`
 - Run at {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")}, runtime {runtime:.1f}s
 - This file is written before the cross-check against the published figures, so a failing run still
   leaves it on disk: trust the exit status, not the presence of the file. The skip counters in the last
@@ -244,9 +259,10 @@ archived result, plus two additional variants. March hand record: `paper/sources
 
 ## Definitions
 
-The paper states none of these; they are the rules that reproduce its numbers.
+This script applies the following rules; the comparison table below shows that they reproduce the
+Section 5.2 figures.
 
-- **Hashed unit.** SHA-256 over the whole file bytes, with no normalisation of line endings, encoding or whitespace.
+- **Hashed unit.** SHA-256 over the whole file bytes, with no normalization of line endings, encoding or whitespace.
   Files come from the archived scan's `file_index`, resolved as `$LIBRARIAN_CORPUS/<marketplace>/<path>` exactly as
   `order_permutation.load_files` does; a path that does not resolve is a skip, never refetched from a bare
   `$LIBRARIAN_CORPUS/<path>` fallback.
@@ -254,16 +270,19 @@ The paper states none of these; they are the rules that reproduce its numbers.
   of multiplicity >= 2.
 - **Malicious, for the group figure.** A group counts as containing malicious content when at least one of its files
   is attributed by `file_level_precision.account_of` to one of the {len(study)} `study` accounts (iocs.json
-  `clawhub_authors` union the {len(antiy)} Antiy CERT accounts). Narrower sets do not reproduce the paper: the Antiy 12
-  give 60 groups (3.1%) and the two primary accounts give 49 (2.5%), against the published 71 (3.6%).
-- **The 564.** Files whose `account_of` is `hightower6eu` or `sakaen736jih`: 352 + 212 on this scan. The hand record's
-  per-author table says 354 for hightower6eu, so 564 is a file count under the account rule, not that table's sum.
+  `clawhub_authors` union the {len(antiy)} Antiy CERT accounts). Narrower account sets give different counts: the 12
+  Antiy CERT accounts alone give 60 groups (3.1%) and the two primary accounts alone give 49 (2.5%), against the
+  paper's 71 (3.6%).
+- **The 564.** Files whose `account_of` is `hightower6eu` or `sakaen736jih`: 352 + 212 on this scan. The scan's
+  `file_index` excludes the two hightower6eu backup-path files (Section 4.4 of the paper counts 354 IOC slugs and
+  352 scanned), and `paper/sources/baseline-comparisons.md` tabulates 354 for hightower6eu, so 564 is a file count
+  under the account rule, not that table's sum.
 - **The 538 and the 26.** Of the 564, those sharing a digest with at least one other file anywhere in the corpus (the
   duplicate partner need not be malicious), and the remainder.
 - **The 96.4%.** Groups with no study-account file, over all groups: (1946 - 71)/1946.
 - **The 11.** Not a hash figure: it is the MinHash clusters at the >= 20 threshold, recomputed here from the scan as a
-  cross-check on the sentence contrasting them with the 1,946 hash groups. The hash-side count of groups containing
-  malicious content is 71, not 11.
+  cross-check on the Section 5.2 sentence contrasting them with the 1,946 hash groups. The hash-side count of groups
+  containing malicious content is 71, not 11.
 
 ## Comparison with the published values
 
@@ -286,18 +305,18 @@ Stripping the frontmatter moves file recall for the two primary accounts from 53
 removed, and the remaining {26 - stuck} gains a duplicate partner. Group count rises to {variants["nofm"]["groups"]} and the
 group-level false-positive rate to {variants["nofm"]["fp_pct"]:.1f}%, because bodies shared across differing headers form new groups.
 
-Of the 26: one is
-body-identical to a sibling and differs only in its frontmatter; none differ only in body lines
-echoing the frontmatter name or description; ten differ in template-slot text (provider version
-strings, whitespace, bullet style, escaping, and in one case a C2 path); fifteen differ
-substantively. Of those fifteen, eight are sakaen736jih copies of a hightower6eu skill with the
-payload block absent (gas-tracker, insider-wallets-finder, phantom, solana, wallet-tracker,
-yt-summarize, yt-thumbnail-grabber, yt-video-downloader) and seven are distinct skills by the same
-accounts (sakaen736jih ethereum, leo-wallet, metamask, solflare, tron, tronlink, and
-hightower6eu/pdf-1wso5). Fourteen of the 26 carry no payload text in the body at all, and
-`iocs.json` lists 24 of the 26 under `skill_slugs_without_payload` — including
-hightower6eu/pdf-1wso5, whose body does carry an openclaw-core download and a base64 dropper, so
-that `iocs.json` field is wrong about the file rather than the file being payload-free.
+The four groups that Section 5.2 gives for the 26 raw misses, from a reading of each file against
+its nearest sibling: one is body-identical to a sibling and differs only in its frontmatter; none
+differ only in body lines echoing the frontmatter name or description; ten differ in template-slot
+text (provider version strings, whitespace, bullet style, escaping, and in one case a C2 path);
+fifteen differ substantively. Of those fifteen, eight are sakaen736jih copies of a hightower6eu
+skill with the payload block absent (gas-tracker, insider-wallets-finder, phantom, solana,
+wallet-tracker, yt-summarize, yt-thumbnail-grabber, yt-video-downloader) and seven are distinct
+skills by the same accounts (sakaen736jih ethereum, leo-wallet, metamask, solflare, tron, tronlink,
+and hightower6eu/pdf-1wso5). Fourteen of the 26 carry no payload text in the body at all, and
+`iocs.json` lists 24 of the 26 under `skill_slugs_without_payload`, including
+hightower6eu/pdf-1wso5, whose body does carry an openclaw-core download and a base64 dropper; that
+`iocs.json` entry misdescribes the file, which is not payload-free.
 
 | Variant | Missing | Unreadable | Other marketplace | Unterminated frontmatter |
 |---|---|---|---|---|

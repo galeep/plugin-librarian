@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
-"""Recompute the default-seed baseline clustering and diff it against the archive.
+"""Recompute the default-seed clustering from the pinned corpus and diff it against the archived scan.
 
-Reproduces the archived clustering from the pinned corpus, then reports where the
-recomputed clusters and the archived ones disagree: clusters present in only one of
-them, and every file whose cluster membership differs.
+Supports two sentences of the paper. Section 3.3 (Similarity Analysis): "the default
+seed reproduces the archived scan exactly." Section 4.1 (Ecosystem Characterization
+(RQ1)): "At a 90% Jaccard similarity threshold, 2,622 clusters held 7,147 memberships
+over 7,061 distinct SKILL.md files, 22.3% of the 31,634 indexed; clusters may overlap,
+so memberships exceed files." The recomputed counts appear in section a of
+`reproduction-20260907.md`, beside this script.
 
-Reuses `order_permutation.py`'s loader, signature and greedy code, so this recompute is
-the same procedure the seed-robustness and order-permutation runs use.
+The script rebuilds the 90% threshold clustering from the corpus files, then reports
+where the recomputed clusters and the archived ones disagree: clusters present in only
+one of them, and every file whose cluster membership differs. An exact reproduction
+prints zero for both.
 
-Inputs. LIBRARIAN_CORPUS (required) names the pinned March corpus; see
+It reuses the loader, signature and greedy code of `order_permutation.py`, so this
+recompute is the same procedure the seed-robustness and order-permutation runs use.
+
+Inputs. LIBRARIAN_CORPUS (required) names the pinned corpus; the snapshot SHAs are in
 paper/supplementary/repository-commits.md. `order_permutation.require_corpus()` stops
-the run at import time when it is unset or names no directory. The file list is the
-`file_index` of `scan_20260314_threshold90_skillonly.json`.
+the run at import time when it is unset or names no directory. The file list and the
+archived clusters are the `file_index` and `clusters` of
+`scan_20260314_threshold90_skillonly.json`, beside this script.
 
 Output: the diff report on stdout, which is the result. `sigs.pkl` and
 `clusterings.pkl` are written to CLUSTER_GAP_OUT (default: the current directory) so a
@@ -20,9 +29,9 @@ and are safe to delete.
 
 Runtime is dominated by signature computation over 31,634 files.
 
-Run:
-  LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS CLUSTER_GAP_OUT=out python \
-    paper/sources/scans/cluster_gap_recompute.py | tee cluster-gap.txt
+Run, with LIBRARIAN_CORPUS set (and CLUSTER_GAP_OUT if the intermediates should land
+somewhere other than the current directory):
+  python paper/sources/scans/cluster_gap_recompute.py | tee cluster-gap.txt
 """
 import json, os, pickle, sys
 from pathlib import Path
@@ -30,8 +39,8 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "paper" / "sources" / "scans"))
 sys.path.insert(0, str(REPO))
 # The corpus comes from LIBRARIAN_CORPUS; order_permutation.require_corpus() stops
-# the run at this import when it is unset or names no directory. No default here:
-# a path from the author's machine would silently cluster the wrong tree.
+# the run at this import when it is unset or names no directory. There is no default
+# corpus path: a fallback would silently cluster the wrong tree.
 import order_permutation as op
 from datasketch import MinHashLSH
 OUT = Path(os.environ.get("CLUSTER_GAP_OUT", ".")).expanduser()

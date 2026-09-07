@@ -1,34 +1,66 @@
 #!/usr/bin/env python3
-"""Independent recomputation of the MinHash seed-robustness ARI figures.
+"""Adjusted Rand index between MinHash clusterings of the pinned March 2026 corpus.
 
-Written from scratch against the procedure described in
-paper/sources/scans/seed_robustness.py; shares no code with it. The adjusted
-Rand index here is computed from a contingency table via sums of C(n,2), which
-is the Hubert-Arabie form written a different way from the a/b/c/d pair-count
-loop `seed_robustness.py` uses. Agreement between the two routes is the point.
+This script recomputes the seed-robustness and order-permutation adjusted Rand
+index figures of the paper by a route independent of `seed_robustness.py`. It
+shares no code with that script, and its adjusted Rand index is computed from a
+contingency table via sums of C(n,2), which is the Hubert-Arabie form written a
+different way from the a/b/c/d pair-count loop `seed_robustness.py` uses.
+Agreement between the two routes is the check.
 
-Three populations are reported for every comparison:
+Paper statements supported, both in Section 3.3 (Similarity Analysis): "Over the
+10 pairwise comparisons among the five seeds, computed over every file clustered
+under either seed, with the remainder as singletons, and flattened by
+last-cluster-wins, adjusted Rand index scores ranged from 0.931 to 0.955" and
+"Permuting the assignment order (10 shuffles, signatures fixed) gave adjusted
+Rand index scores of 0.982 to 0.992 over the files clustered under both
+orderings, so ordering perturbs membership only at the margin." Section 6
+(Limitations) restates both ranges: "the adjusted Rand index runs 0.931 to 0.955
+across seeds (all files clustered under either seed) and 0.982 to 0.992 across
+orderings".
 
-  intersection - only files clustered under both labelings (what `seed_robustness.py`
-                 measures, and what the paper quotes)
-  union        - every file clustered under at least one labeling; a file not
-                 clustered under one of them becomes its own singleton there
-  corpus       - every file with a signature; unclustered files are singletons
+Three populations are reported for every comparison, each as its own key in the
+results file:
 
+  intersection (`ari_inter`) - only files clustered under both labelings. This is
+                 the population of the ordering range, 0.982 to 0.992, and of the
+                 pairwise table in `seed-robustness-20260907.md`, on which the two
+                 scripts agree.
+  union (`ari_union`) - every file clustered under at least one labeling; a file
+                 not clustered under one of them is its own singleton there. This
+                 is the population of the seed range, 0.931 to 0.955.
+  corpus (`ari_corpus`) - every file with a signature; unclustered files are
+                 singletons under both labelings.
 
-Inputs. LIBRARIAN_CORPUS (required) names the pinned March corpus; see
-paper/supplementary/repository-commits.md. The file list is the `file_index` of
-`scan_20260314_threshold90_skillonly.json`. Parameters: 0.9 threshold, 100-character
-minimum, seeds 1/42/123/456/789, shuffle seeds 1000-1009.
+The seed comparison scores all ten pairs among the five seeds, each seed's
+clustering produced by the greedy first-match loop over files in sorted index
+order. The order comparison holds the seed-1 signatures fixed (seed 1 is the
+datasketch default and reproduces the archived scan), takes the sorted-order
+clustering as the baseline, and rescores it against ten shuffled processing
+orders drawn from `random.Random(1000)` through `random.Random(1009)`.
 
-Outputs, written beside this script: `recompute-ari-results<SUFFIX>.json` with every ARI
-and cluster count, and one `clusterings<SUFFIX>-*.json` per labeling. OUT_SUFFIX is empty
-by default and affects no computation. The artifact ships the results file with the run
-date appended, `recompute-ari-results-20260907.json`; the per-labeling clusterings are
-intermediates and are not shipped.
+`self_test()` pins the adjusted Rand index against hand-computed pair counts on a
+toy partition pair, checks an identical pair scores 1, and checks a random
+relabeling scores near 0; the run stops if any check fails.
 
-Run:
-  LIBRARIAN_CORPUS=$LIBRARIAN_CORPUS python paper/sources/scans/recompute_ari.py
+Inputs. LIBRARIAN_CORPUS (required) names the pinned March 2026 corpus; see
+paper/supplementary/repository-commits.md for the SHAs. The file list is the
+`file_index` of `scan_20260314_threshold90_skillonly.json`, committed beside this
+script. Parameters: 0.9 LSH threshold, 100-character minimum file length, 128
+permutations (`librarian.core.NUM_PERM`), seeds 1/42/123/456/789, shuffle seeds
+1000-1009.
+
+Outputs, written beside this script: `recompute-ari-results.json` holding the
+resolution tally, per-seed cluster counts, the ten seed rows and the ten order
+rows, each row carrying the three populations' sizes and adjusted Rand indices;
+and one `clusterings-*.json` per labeling. When OUT_SUFFIX is set, it is inserted
+before the file extension of every output name so that two runs can be kept side
+by side; it affects no computation. The results file in this artifact,
+`recompute-ari-results-20260907.json`, was produced with OUT_SUFFIX=-20260907. The
+per-labeling clusterings are intermediates and are not part of this artifact.
+
+Run, with LIBRARIAN_CORPUS set:
+  python paper/sources/scans/recompute_ari.py
 """
 
 import json
@@ -47,25 +79,26 @@ from librarian.core import tokenize, NUM_PERM  # noqa: E402
 def require_corpus():
     """Corpus root from LIBRARIAN_CORPUS, or exit; there is no default.
 
-    DESIGN RATIONALE: a fallback to a checkout on the author's machine hands a
-    reproducer plausible numbers computed against the wrong tree. No default is
-    right, so there is none, and a missing or wrong value stops the run.
+    DESIGN RATIONALE: a default corpus path would hand a reproducer plausible
+    numbers computed against the wrong tree. No default is right, so there is
+    none, and a missing or wrong value stops the run.
     """
     value = os.environ.get("LIBRARIAN_CORPUS")
     if not value:
-        sys.exit("LIBRARIAN_CORPUS is unset; set it to the pinned March snapshot "
+        sys.exit("LIBRARIAN_CORPUS is unset; set it to the pinned March 2026 snapshot "
                  "(see paper/supplementary/repository-commits.md) and rerun.")
     root = os.path.expanduser(value)
     if not os.path.isdir(root):
         sys.exit(f"LIBRARIAN_CORPUS={value} is not a directory; set it to the pinned "
-                 "March snapshot (see paper/supplementary/repository-commits.md) and rerun.")
+                 "March 2026 snapshot (see paper/supplementary/repository-commits.md) and rerun.")
     return root
 
 
 CORPUS = require_corpus()
 SCAN = os.path.join(REPO, "paper/sources/scans/scan_20260314_threshold90_skillonly.json")
 OUTDIR = os.path.dirname(os.path.abspath(__file__))
-# Output-name suffix only, so two runs can be kept side by side. Affects no computation.
+# Output-name suffix only, so two runs can be kept side by side; affects no computation.
+# The shipped results file was written with OUT_SUFFIX=-20260907.
 SUFFIX = os.environ.get("OUT_SUFFIX", "")
 
 THRESHOLD = 0.9
@@ -83,11 +116,13 @@ def _choose2(k):
 
 
 def ari_from_labels(labels_a, labels_b):
-    """Hubert-Arabie ARI between two label dicts over an identical key set.
+    """Hubert-Arabie adjusted Rand index between two label dicts over one key set.
 
     Returns (ari, n_items, index, expected, maximum) where `index` is
-    sum_ij C(n_ij, 2), `expected` is sum_i C(a_i,2) * sum_j C(b_j,2) / C(N,2),
-    and `maximum` is the mean of the two marginal pair sums.
+    sum_ij C(n_ij, 2) over the contingency table, `expected` is
+    sum_i C(a_i,2) * sum_j C(b_j,2) / C(N,2), and `maximum` is the mean of the
+    two marginal pair sums. The result is (index - expected) / (maximum -
+    expected), or NaN when the denominator is zero.
     """
     keys = labels_a.keys()
     assert keys == labels_b.keys() or set(labels_a) == set(labels_b)
@@ -118,7 +153,11 @@ def ari_from_labels(labels_a, labels_b):
 
 
 def flatten(clusters):
-    """Last-cluster-wins hard assignment: file -> cluster ordinal."""
+    """Last-cluster-wins hard assignment: file -> cluster ordinal.
+
+    A file that the greedy loop returned into more than one cluster keeps the
+    label of the last cluster listed, which is the flattening the paper names.
+    """
     lab = {}
     for k, members in enumerate(clusters):
         for m in members:
@@ -127,11 +166,12 @@ def flatten(clusters):
 
 
 def three_populations(clusters_a, clusters_b, universe):
-    """(intersection, union, corpus) ARI for one pair of clusterings.
+    """(intersection, union, corpus) adjusted Rand index for one pair of clusterings.
 
     `universe` is every file with a signature. Singleton labels are made unique
     per labeling by tagging them with the file id, so no two unclustered files
-    ever share a label.
+    ever share a label. Returns the three `ari_from_labels` tuples followed by
+    the intersection and union sizes.
     """
     la = flatten(clusters_a)
     lb = flatten(clusters_b)
@@ -157,6 +197,13 @@ def three_populations(clusters_a, clusters_b, universe):
 # --------------------------------------------------------------------------
 
 def self_test():
+    """Pin the adjusted Rand index against hand-computed values; False on any miss.
+
+    For the partitions A and B below the contingency table has cell counts
+    2, 1, 2, 1, 3, so index = 5, the marginal pair sums are 9 and 10 over
+    C(9,2) = 36 pairs, expected = 2.5, maximum = 9.5, and the adjusted Rand
+    index is 2.5 / 7.
+    """
     a = [{0, 1, 2}, {3, 4, 5}, {6, 7, 8}]
     b = [{0, 1}, {2, 3, 4}, {5, 6, 7, 8}]
 
@@ -170,8 +217,8 @@ def self_test():
     ok2 = abs(ari2 - 1.0) < 1e-12
     print(f"  self-test identical: ARI={ari2:.9f} (want 1.0) -> {'PASS' if ok2 else 'FAIL'}")
 
-    # A third check the committed script does not make: a labeling against a
-    # random relabeling of the same items should sit near 0, not near 1.
+    # A labeling against a random relabeling of the same items should sit near
+    # 0, not near 1.
     rng = random.Random(7)
     items = list(range(300))
     l1 = {i: i // 3 for i in items}
@@ -190,7 +237,13 @@ def self_test():
 # --------------------------------------------------------------------------
 
 def build_signatures():
-    """One read/tokenize pass; five MinHash signatures per file."""
+    """One read/tokenize pass over the scan's `file_index`; five MinHash signatures per file.
+
+    Returns the signatures keyed by seed and then by file-index position, and a
+    tally of how each entry resolved: `ok`, `missing` (no file at that path
+    under LIBRARIAN_CORPUS), `error` (read failed), `short` (under MIN_CHARS),
+    or `empty` (no shingles). Only `ok` files receive signatures.
+    """
     with open(SCAN, encoding="utf-8") as fh:
         scan = json.load(fh)
     index = scan["file_index"]
@@ -233,7 +286,13 @@ def build_signatures():
 
 
 def greedy_clusters(sigs, order):
-    """Greedy first-match loop, as librarian/cli.py runs it."""
+    """Greedy first-match loop, as `librarian/cli.py` runs it; returns (clusters, lsh).
+
+    Every signature is indexed, then files are visited in `order`; an unassigned
+    file whose query returns more than one hit forms a cluster with all of its
+    hits, and all of them are marked assigned. The LSH index is returned so the
+    order permutation can requery it without rebuilding.
+    """
     lsh = MinHashLSH(threshold=THRESHOLD, num_perm=NUM_PERM)
     for i, m in sigs.items():
         lsh.insert(str(i), m)
@@ -250,6 +309,7 @@ def greedy_clusters(sigs, order):
 
 
 def greedy_with_lsh(lsh, sigs, order):
+    """The same greedy loop over an already-built LSH index and a new visiting order."""
     assigned = set()
     clusters = []
     for i in order:
@@ -263,6 +323,7 @@ def greedy_with_lsh(lsh, sigs, order):
 
 
 def dump(clusters, name):
+    """Write one labeling as a JSON list of sorted member lists beside this script."""
     p = os.path.join(OUTDIR, name)
     with open(p, "w", encoding="utf-8") as fh:
         json.dump([sorted(c) for c in clusters], fh)
@@ -304,13 +365,13 @@ def main():
             print(f"  {s1} vs {s2}: inter n={n_i} ARI={ri_[0]:.4f} | "
                   f"union n={n_u} ARI={ru_[0]:.4f} | corpus ARI={rc_[0]:.4f}", flush=True)
 
-    # ---- order permutation, default-seed signatures (datasketch default = 1)
+    # ---- order permutation on the seed-1 signatures (seed 1 is the datasketch default)
     print("\nOrder permutation on default-seed signatures...")
     dsigs = sigs[1]
     dlsh = lshes[1]
     keys = sorted(dsigs)
-    # The baseline is the sorted-order greedy run on default-seed signatures,
-    # which is exactly the seed-1 clustering already computed above.
+    # The baseline is the sorted-order greedy run on the seed-1 signatures, which
+    # is the seed-1 clustering computed above and matches the archived scan.
     base = per_seed[1]
     dump(base, f"clusterings{SUFFIX}-order-baseline.json")
     order_rows = []
