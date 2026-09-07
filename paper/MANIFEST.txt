@@ -17,8 +17,8 @@ paper/sources/scans/embedding_comparison.py  28840  2ae681bb50e0915369e1142ccc76
 paper/sources/scans/embedding_comparison_report.py  25644  4396185cba10dd98f825801ef77e7194ae069f39c822a6d269614ebdefd4e23c
 paper/sources/scans/exact-hash-baseline-20260907.md  7060  63bf16f54063e922afe82c78241815c65992b9455c32ab6a4aedcf61b00728a9
 paper/sources/scans/exact_hash_baseline.py  17793  76f166f904b852d6d53510c61d5aa83f8f2b1d61f2a394f2b16a8c84d0fc4195
-paper/sources/scans/file-level-precision-20260907.md  22985  340c61a82330f692324502ed02daeecae6972fbfd79c3e4a0849bee646273fad
-paper/sources/scans/file_level_precision.py  38867  7cffe7cb6f427426f1803020f2937f6e11698ac9fd140abc070fc8afde0bf473
+paper/sources/scans/file-level-precision-20260907.md  23048  2d71dcc55e2afcda893986aa032c4ce9f2215eee1b06b89f6043df3a4425fdff
+paper/sources/scans/file_level_precision.py  38945  ac064a128b2a36b14cef809c0abfadd6eeea27f8ff30573ba888cf64693b0c50
 paper/sources/scans/marketplace_matrix.py  6289  07d9b80b9727014810e823d3e102d19b73a9e40cc7c7603fa7eb3bece44ee604
 paper/sources/scans/order-permutation-20260907.md  5457  e123dfed206f76179d175f12bd5fdcf24026e56e52950b548f2599e5b9cd45c2
 paper/sources/scans/order_permutation.py  21730  79acd0e0834b628c815bc8974cf3ac9981a1e1c5bddcc0c1adf70ac953442033

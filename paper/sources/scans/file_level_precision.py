@@ -369,12 +369,13 @@ def cross_check(measured, context, marker_reproduces, columns):
             " at >= 5 (59 against 60).",
             "",
             "On the >= 10 row the sources disagree with each other, not only with this script."
-            " The March analysis carried 32/38, and the published table has read 30/38 since the"
-            " paper's first draft, with no later change. Neither the March analysis nor its"
-            " supporting notes is part of this artifact. The scaffold rule's 31"
-            " sits between the two. Differences of one cluster are what hand triage under"
-            " Section 3.4's third clause would produce, since those per-cluster decisions were"
-            " never recorded.",
+            " The March analysis carried 32/38; the published table reads 30/38. Neither the"
+            " March analysis nor its supporting notes is part of this artifact. The"
+            " scaffold rule's 31"
+            " sits between the two. The >= 15 and >= 5 rows come from a March hand triage"
+            " whose per-cluster decisions were never archived; the paper prints them"
+            " unchanged, and this script does not reproduce them. Differences of one cluster"
+            " are what hand triage under Section 3.4's third clause would produce.",
             "",
             "**This reconstruction is circular, and the 44/44 row is where the circularity is"
             " clearest.** The `scaffold` tag is assigned by the same clustering pipeline whose"
