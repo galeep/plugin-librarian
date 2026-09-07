@@ -18,7 +18,7 @@ Outputs, written to the CURRENT WORKING DIRECTORY, not beside this script:
 `threshold-sensitivity.pdf`, `threshold-sensitivity.png`, `method-comparison.pdf`,
 `method-comparison.png`. Run it from `paper/figures/` to refresh the committed files.
 
-Style follows the venue's requirements: Okabe-Ito colourblind-safe palette, redundant
+Style: Okabe-Ito colourblind-safe palette, redundant
 encoding (colour plus marker plus line style), serif fonts, 300 DPI minimum with
 vector PDF as the primary artifact.
 

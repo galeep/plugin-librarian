@@ -3,7 +3,7 @@
 #
 paper/README.md  17854  dc8a4594ce644cb3c9470b319223918b1d566d99f7018f81757783285b4cee51
 paper/figures/generate_cluster_distribution.py  8026  e22f554cf73b6cf0f6800aa360521e60259a675e985aec140d006929ac92a5e1
-paper/figures/generate_figures.py  6290  c96a92d7bbd3f4d72d44bd353733f7aa0ffe0ba08b21a05d5a64bd851336732d
+paper/figures/generate_figures.py  6257  68ee81d31a3887c0b347841624ed52ef70a74501bef77530d5f11b0fabb4d7b7
 paper/iocs.json  37422  6cd75cc367abca134fc09a0a9eafcd8de2c91fbf057f28aecb10480bc2388c7a
 paper/sources/baseline-comparisons.md  9528  6dc12e158d92392e894c163b6e6874a9c782884dd6dbca6073b0e27831cb1611
 paper/sources/scans/analyze_sweep.py  7928  ede9f5baa665b45e03872bf242d91874e345b9d293e774536c5f0c571af9f807
