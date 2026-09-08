@@ -1,7 +1,7 @@
 # MANIFEST for the artifact and reproduction materials
 # path  bytes  sha256
 #
-paper/README.md  20814  d9883a1228d5be6a24fd6db4515e1a31d4fb0183c78bbf10c35b14f34f67bf08
+paper/README.md  21107  bfbd693d1ff852a6bd67806937fd9d5c6d642e5e84e5bdf865fff2ee30f066d8
 paper/figures/generate_cluster_distribution.py  8466  8eb67b93284167575660a86b1385c1e09c70a5eeeaa0cb09ed03f7f4485a32ff
 paper/figures/generate_figures.py  7508  75cb1259b98ddfd8eb4b2db2bafb3747b50ed8d9fb572ed638b378f5cfa26b4f
 paper/iocs.json  37422  6cd75cc367abca134fc09a0a9eafcd8de2c91fbf057f28aecb10480bc2388c7a

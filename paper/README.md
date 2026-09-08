@@ -25,6 +25,9 @@ paper/sources/baseline-comparisons.md   Section 5.2 baseline summary
 paper/figures/                     figure generators
 ```
 
+Warning: `paper/iocs.json` and the tables in `paper/supplementary/` reproduce live attacker infrastructure (IP addresses, domains, payload URLs) exactly as the cited vendor reports publish it, undefanged, because the scripts here consume the file as data. Do not visit or resolve any of it.
+
+
 ## Start here
 
 1. From the repository root, in a virtual environment, run `pip install -e .`.
