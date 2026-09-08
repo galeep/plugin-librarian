@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Recompute Table 1 (corpus repositories) from the archived 90% scan.
 
-Supports Table 1 in Section 3.2 (Dataset Construction), captioned "Repositories
-included in the corpus. File counts reflect SKILL.md files meeting the 100-character
-minimum after filtering."
+Supports Table 1 (Section 3.2, Dataset Construction), whose counts are the SKILL.md
+files of each repository that meet the 100-character minimum after filtering.
 
 Counts files per `marketplace` value in the scan's `file_index`, pools every
 repository with fewer than 50 files into a single aggregate row, and compares the
@@ -141,9 +140,9 @@ def build_report(scan, rows, extra, pooled, ordered_named):
         "",
         "This file reports the file count of every corpus repository, recomputed from"
         " the archived scan, and compares each row against Table 1 as printed. It"
-        " supports Table 1 in Section 3.2 (Dataset Construction), captioned"
-        " \"Repositories included in the corpus. File counts reflect SKILL.md files"
-        " meeting the 100-character minimum after filtering.\"",
+        " supports Table 1 (Section 3.2, Dataset Construction), whose counts are the"
+        " `SKILL.md` files of each repository that meet the 100-character minimum"
+        " after filtering.",
         "",
         "## Provenance",
         "",

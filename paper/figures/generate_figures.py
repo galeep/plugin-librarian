@@ -55,6 +55,8 @@ OI_BLACK = '#000000'
 
 # Figure style shared by both figures
 plt.rcParams.update({
+    'pdf.fonttype': 42,
+    'ps.fonttype': 42,
     'font.family': 'serif',
     'font.serif': ['Times', 'Times New Roman', 'DejaVu Serif'],
     'font.size': 8,

@@ -2,13 +2,12 @@
 """Distinct clustered files and cluster memberships per Jaccard threshold, for Table 2.
 
 Clusters overlap, so the sum of cluster sizes (memberships) exceeds the number of
-distinct files that belong to at least one cluster. Table 2 of the paper ("Threshold
-sensitivity on 31,634 SKILL.md files", Section 4.1, Ecosystem Characterization) reports
-distinct files in its *Files* column, and the opening sentence of Section 4.1 gives both
-counts at 90%: "At a 90% Jaccard similarity threshold, 2,622 clusters held 7,147
-memberships over 7,061 distinct SKILL.md files, 22.3% of the 31,634 indexed; clusters
-may overlap, so memberships exceed files." Table 5 (shingle size ablation, Section 5.2)
-reports memberships. This script reads each archived scan and prints, per threshold:
+distinct files that belong to at least one cluster. Table 2 of the paper (Section 4.1,
+Ecosystem Characterization) reports distinct files in its *Files* column, and the
+opening figures of Section 4.1 give both counts at the 90% threshold: the cluster
+count, the membership count, the distinct clustered file count and its share of the
+file index, with memberships exceeding files because clusters may overlap. Table 5
+(shingle size ablation, Section 5.2) reports memberships. This script reads each archived scan and prints, per threshold:
 cluster count, memberships, distinct clustered files, and each of the last two as a
 share of the file index.
 
@@ -96,12 +95,12 @@ def build_report(rows):
              "Jaccard threshold in the sweep, the cluster count, the number of cluster memberships, and the "
              "number of distinct clustered files, with the last two also as shares of the file index.",
              "",
-             "It supports Table 2 of the paper (\"Threshold sensitivity on 31,634 SKILL.md files\", "
-             "Section 4.1, Ecosystem Characterization), whose *Files* column is the *Distinct* column here, "
-             "and the opening sentence of Section 4.1: \"At a 90% Jaccard similarity threshold, 2,622 "
-             "clusters held 7,147 memberships over 7,061 distinct SKILL.md files, 22.3% of the 31,634 "
-             "indexed; clusters may overlap, so memberships exceed files.\" The *Memberships* column is the "
-             "count Table 5 (shingle size ablation, Section 5.2) reports in its 3-gram row.",
+             "It supports Table 2 (Section 4.1, Ecosystem Characterization), whose *Files* column is "
+             "the *Distinct* column here, and the opening figures of Section 4.1 for the 90% threshold: "
+             "the cluster count, the membership count, the distinct clustered file count and its share of "
+             "the file index, with memberships exceeding files because clusters may overlap. The "
+             "*Memberships* column is the count Table 5 (shingle size ablation, Section 5.2) reports in "
+             "its 3-gram row.",
              "",
              "*Memberships* is the sum of cluster sizes. *Distinct* is the number of distinct `file_index` "
              "values across all clusters; the script checks that it equals the count of `in_cluster` flags "

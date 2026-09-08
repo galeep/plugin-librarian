@@ -153,7 +153,7 @@ def draw(scan, outdir):
     sizes = cluster_sizes(scan)
     by_type = sizes_by_type(scan)
 
-    plt.rcParams.update({'font.size': FONT_SIZE})
+    plt.rcParams.update({'font.size': FONT_SIZE, 'pdf.fonttype': 42, 'ps.fonttype': 42})
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=FIGSIZE)
 
     ax1.hist(sizes, bins=BINS, color=TYPE_COLORS['cross-marketplace'],
