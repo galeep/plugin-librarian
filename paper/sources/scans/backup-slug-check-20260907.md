@@ -6,7 +6,7 @@ Input scan: `scan_20260314_threshold90_skillonly.json` (31634 indexed files).
 Command: `python paper/sources/scans/backup_slug_check.py` from the repository root, with LIBRARIAN_CORPUS set.
 Generated: 2026-09-07 03:33:22Z.
 
-This file reports what the backup-path filter excluded from the clustering and supports three statements in the paper. Section 3.2, Dataset Construction: "Before that test, the scanner had skipped any path containing `backup` (864 files, 780 of them one repository's backup directory)." Section 4.4, IOC Validation: "Of the 354 slugs, 2 were skipped by the backup-path filter ...; of the 352 scanned, 351 appeared in clusters (99.7% of those scanned; 99.2% against the full 354)." Section 6, Limitations: "the backup-path filter skipped 2 hightower6eu skills that, scanned, cluster only with each other."
+What the backup-path filter excluded from the clustering. It supports the filter description in Section 3.2 (Dataset Construction), the recall chain of Section 4.4 (IOC Validation) from the 354 recorded slugs down to the 351 that clustered, and the note in Section 6 (Limitations) that the filter skipped two hightower6eu skills which, once scanned, cluster only with each other.
 
 What it measures: for every `SKILL.md` the filter excluded from `clawhub-archive`, whether the archived index returns any LSH candidate for it at threshold 0.9, and whether the cluster count and the hightower6eu recall move when the 2 skipped hightower6eu skills are scanned alongside the archived files.
 

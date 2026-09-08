@@ -4,17 +4,12 @@ This file is the scaffold-cluster list that accompanies the paper. It lists the 
 clusters in the archived scan whose publishing pattern is consistent with a documented
 campaign but whose evidence does not support confirmed classification, giving for each the
 publishing account, a representative skill name, the number of near-identical files in the
-cluster, and the pattern the cluster shares with a campaign. It supports the closing
-sentence of Appendix B (Behavioral Pattern Scan): "Further campaign-consistent but
-unconfirmed scaffold clusters accompany the artifact (Appendix C)." It is also the
-"scaffold-cluster list" named in Appendix C (Reproduction): "That repository is the
-artifact: it holds the tool, the commit table, the similarity matrix, the scaffold-cluster
-list, the results files behind the figures reported here, and the reproduction commands
-with the tool commit the published scan ran at."
+cluster, and the pattern the cluster shares with a campaign. It is the list Appendix B
+(Behavioral Pattern Scan) refers to at its close, and one of the items named in
+Appendix C (Reproduction).
 
-Section 3.3 (Similarity Analysis) defines the cluster type: "A *scaffold* cluster contains
-5 or more files from a single marketplace with mean pairwise similarity ≥ 98%, representing
-near-duplicate template files originating from one source." The clusters below meet that
+Section 3.3 (Similarity Analysis) defines the cluster type: a scaffold cluster holds
+5 or more files from a single marketplace with mean pairwise similarity of at least 98%. The clusters below meet that
 definition and carry campaign-consistent patterns, but the evidence does not support
 confirmed classification, so they are recorded here rather than counted among the campaigns
 of Table 3.

@@ -5,9 +5,9 @@ Output defaults to `behavioral-scan-YYYYMMDD.md`, dated by the run's UTC day; se
 
 ## What this file reports
 
-This file reports the behavioral pattern counts of Appendix B, Table 7, whose caption reads "Behavioral pattern scan (`behavioral_scan.py`, patterns recorded in the script) over the 23,806 `SKILL.md` files of the archived ClawHub snapshot: 1,469 files match at least one pattern, 485 of them in similarity clusters." The six patterns are the regular expressions in the script's `ROWS` table, one primary per row with its alternate readings beside it, and the comparison below checks the counts the script produces against the published table.
+The behavioral pattern counts of Table 7 (Appendix B, Behavioral Pattern Scan), recomputed over the archived ClawHub snapshot. The six patterns are the regular expressions in the script's `ROWS` table, one primary per row with its alternate readings beside it, and the comparison below checks the counts the script produces against the published table.
 
-The Section 4.5 sentence "Of the 1,469 files matching at least one pattern, 485 (33.0%) also appeared in similarity clusters" is recomputed here as the union of the six primaries intersected with the archived scan's `in_cluster` flag. Section 3.5 qualifies the counts: "These counts include legitimate security tools; raw figures are upper bounds on suspicious content." Two further rows, SSH key references and password-protected ZIP, come from the March working notes, which are not part of this artifact; they are not in Table 7 and are reported separately below.
+Section 4.5 (Structural Clustering vs. Pattern-Based Triage) reports how many of the pattern-matching files also appeared in similarity clusters; that share is recomputed here as the union of the six primaries intersected with the archived scan's `in_cluster` flag. Section 3.5 (Behavioral Pattern Scanning) qualifies the counts as upper bounds on suspicious content, because they include legitimate security tools. Two further rows, SSH key references and password-protected ZIP, come from the March working notes, which are not part of this artifact; they are not in Table 7 and are reported separately below.
 
 ## Population
 

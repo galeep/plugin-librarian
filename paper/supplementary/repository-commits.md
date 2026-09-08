@@ -1,18 +1,10 @@
 # Repository Commit SHAs
 
-This file records the commit at which each repository of the corpus was
-cloned and the date of that clone. It is the commit table the paper
-refers to in Appendix C (Reproduction):
-
-> "The ClawHub archive was cloned on 2026-03-13 at commit `16c991de`, and
-> the community and curated repositories between 2026-01-02 and
-> 2026-03-13."
-
-It also supports the mirror-pair sentence of Section 4.2 (Marketplace
-Similarity Matrix):
-
-> "Each is one upstream repository cloned into the corpus under two
-> names, as the artifact's commit table records (Appendix C)."
+The commit at which each repository of the corpus was cloned, and the
+date of that clone. This is the commit table cited in Appendix C
+(Reproduction). It also backs the mirror pairs of Section 4.2
+(Marketplace Similarity Matrix), where two pairs of corpus directories
+turn out to be one upstream repository cloned under two names.
 
 Every repository was cloned with `git clone --depth 1`. The commit SHA
 of each clone is given in full for the ClawHub archive and abbreviated

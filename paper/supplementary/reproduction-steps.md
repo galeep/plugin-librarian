@@ -1,15 +1,8 @@
 # Reproduction Steps
 
-This file lists the commands that retrieve the corpus snapshot and rerun
-the published scan, and it records the tool commit the scan ran at. It
-supports Appendix C (Reproduction): "That repository is the artifact: it
-holds the tool, the commit table, the similarity matrix, the
-scaffold-cluster list, the results files behind the figures reported
-here, and the reproduction commands with the tool commit the published
-scan ran at." The closing paragraph supports the backup-filter sentence
-in Section 3.2 (Dataset Construction): "Before that test, the scanner
-had skipped any path containing backup (864 files, 780 of them one
-repository's backup directory)."
+Commands that retrieve the corpus snapshot and rerun the published scan,
+with the tool commit it ran at. It supports Appendix C (Reproduction) and the
+backup-filter description in Section 3.2 (Dataset Construction).
 
 The primary analysis ran on the ClawHub archive snapshot cloned on
 2026-03-13 at commit `16c991de` (full SHA

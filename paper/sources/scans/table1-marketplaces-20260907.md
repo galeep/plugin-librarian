@@ -1,6 +1,6 @@
 # Table 1 (corpus repositories) recomputed from the archived 90% scan
 
-This file reports the file count of every corpus repository, recomputed from the archived scan, and compares each row against Table 1 as printed. It supports Table 1 in Section 3.2 (Dataset Construction), captioned "Repositories included in the corpus. File counts reflect SKILL.md files meeting the 100-character minimum after filtering."
+This file reports the file count of every corpus repository, recomputed from the archived scan, and compares each row against Table 1 as printed. It supports Table 1 (Section 3.2, Dataset Construction), whose counts are the `SKILL.md` files of each repository that meet the 100-character minimum after filtering.
 
 ## Provenance
 

@@ -5,13 +5,11 @@ the six archived scans `scan_20260314_threshold{70,75,80,85,90,95}_skillonly.jso
 in this directory. The script reads those scans and `paper/iocs.json`; it does not
 read the corpus, so LIBRARIAN_CORPUS is not needed to reproduce this file.
 
-It supports Table 2 (Section 4.1, "Threshold sensitivity on 31,634 \texttt{SKILL.md}
-files.") and Figure 1 (Section 4.1, "P@$\geq$20 and P@$\geq$10 versus Jaccard
-threshold."), and the following sentences in Section 3.3: "Recall against the Koi IOC
-list held constant at 99.2\% across all six thresholds, confirming that malicious
-campaigns cluster well above the 70\% floor. Precision at the $\geq$20 cluster size
-threshold reached 100\% only at 90\% and above, establishing 90\% as the lowest
-threshold that eliminates false positives for large-cluster triage."
+It supports Table 2 and Figure 1 (both Section 4.1, Ecosystem Characterization), and
+the threshold-selection result of Section 3.3 (Similarity Analysis): recall against the
+Koi IOC list holds constant across all six thresholds, while precision at the >= 20
+cluster size reaches 100% only at 90% and above, which is what makes 90% the lowest
+threshold that eliminates false positives for large-cluster triage.
 
 Column mapping. The Clusters, P@20 and P@10 columns below are Table 2's Clusters,
 P@$\geq$20 and P@$\geq$10 columns. The "In clusters" and "Rate" columns count cluster

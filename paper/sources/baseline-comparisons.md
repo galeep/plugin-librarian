@@ -3,26 +3,19 @@
 This file reports two simple detection baselines on the ClawHub skill corpus, author
 submission count thresholding and exact SHA-256 file deduplication, and sets each beside
 the MinHash clustering results. It supports Section 5.2 (Comparison with Simple
-Baselines), which opens: "Two simple detection methods establish context for the MinHash
-clustering results." Quoted paper sentences below have LaTeX markup removed.
+Baselines), which sets both against the MinHash clustering results.
 
-The author-count tables support these Section 5.2 sentences: "At N >= 5, all 564 skills
-by the two primary campaign authors are captured, but only 7 of 745 flagged authors are
-known malicious (0.9% precision). At N >= 20, precision rises to 5.3% but author-level
-recall drops to 33.3% (5 of 15 IOC-listed authors with >= 1 skill in the archive). The
-core problem is that many legitimate authors publish prolifically: 28 of the top 30
-ClawHub authors by volume are non-malicious."
+The author-count tables support the Section 5.2 figures for author submission count
+thresholding: at N >= 5 every skill by the two primary campaign authors is captured while
+author-level precision stays below one percent, at N >= 20 author-level precision rises
+while author recall falls, and 28 of the top 30 ClawHub authors by volume are not
+malicious. The tables below carry each of those figures.
 
-The exact-hash section supports: "SHA-256 hashing all 31,634 SKILL.md files produces
-1,946 duplicate groups. Of these, 71 (3.6%) contain known malicious authors. Hash-based
-recall for the two primary campaign authors' skills is 95.4% (538 of 564 files share at
-least one exact duplicate), compared to MinHash clustering's 98.8%. The 26 files missed
-by exact hashing (4.6% of the 564) fall into four groups: ten differ in version strings,
-formatting, or a payload URL; eight lack the payload block; seven are distinct skills by
-the same accounts; one differs only in frontmatter." and "An operator triaging exact-hash
-duplicate groups faces a 96.4% false positive rate across 1,946 groups. MinHash
-clustering at the >= 20 threshold produces 11 clusters, all confirmed malicious (100%
-cluster-level precision)."
+The exact-hash section supports the Section 5.2 figures for SHA-256 deduplication: the
+number of duplicate groups, the share of them holding a known malicious author, hash-based
+recall for the two primary campaign authors against MinHash clustering's, the four groups
+the missed files fall into, and the group-level false positive rate, set against the
+11 clusters MinHash produces at the >= 20 threshold, all of them confirmed malicious.
 
 Inputs: the archived similarity scan `paper/sources/scans/scan_20260314_threshold90_skillonly.json`
 (file index and clusters) and the ClawHub archive tree under the corpus root that
@@ -100,8 +93,8 @@ but the units differ.
 
 ### Top 30 ClawHub Authors by Skill Count
 
-This table supports the Section 5.2 clause "28 of the top 30 ClawHub authors by volume
-are non-malicious."
+This table supports the Section 5.2 figure of 28 of the top 30 ClawHub authors by volume
+being non-malicious.
 
 | Rank | Author | Skills | Malicious? |
 |------|--------|--------|------------|

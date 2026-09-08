@@ -9,26 +9,21 @@ script's figures as printed. Four of the scripts also write a results file besid
 `file-level-precision-20260907.md`, `table2-distinct-files-20260907.md`);
 `cluster_gap_recompute.py` reports on stdout only, so section a is its record.
 
-Paper statements each section supports:
+What each section supports:
 
-- Section a. Section 3.3 (Similarity Analysis): "the default seed reproduces the archived scan
-  exactly." Section 4.1 (Ecosystem Characterization (RQ1)): "At a 90% Jaccard similarity
-  threshold, 2,622 clusters held 7,147 memberships over 7,061 distinct SKILL.md files, 22.3% of
-  the 31,634 indexed; clusters may overlap, so memberships exceed files."
-- Section b. Section 3.3: "Running the full analysis with five fixed seeds (the library default,
-  1, and four arbitrary others: 42, 123, 456, 789) produced cluster counts of 2,558 to 2,622; the
-  default seed reproduces the archived scan exactly." and, from the same paragraph,
-  "distinct clustered files moved from 7,061 to 6,935, a 1.8% spread."
-- Section c. Section 3.3: "Permuting the assignment order (10 shuffles, signatures fixed) gave
-  adjusted Rand index scores of 0.982 to 0.992 over the files clustered under both orderings, so
-  ordering perturbs membership only at the margin."
-- Section d. Section 4.4 (IOC Validation): "File-level precision, promised in Section 3.4, is
-  305 of 307 files (0.993) at ≥ 20; at ≥ 10 the corresponding figure is membership-level, 557 of
-  682 memberships over 643 distinct files, 0.817 (per-cluster results are among the files
-  released with the code, Appendix C)." and the Table 4 caption in the same section: "Only the
-  ≥ 20 and ≥ 10 rows reproduce from the released ground truth."
-- Section e. Table 2 ("Threshold sensitivity on 31,634 SKILL.md files", Section 4.1), whose
-  *Files* column is the *distinct* column of section e.
+- Section a. Section 3.3 (Similarity Analysis), on the default seed reproducing the archived
+  scan exactly, and the opening figures of Section 4.1 (Ecosystem Characterization) for the
+  90% threshold: clusters, memberships, distinct clustered files and the share of the file
+  index, with memberships exceeding files because clusters may overlap.
+- Section b. Section 3.3, on the cluster counts produced by five fixed seeds and the spread in
+  distinct clustered files across them.
+- Section c. Section 3.3, on the adjusted Rand index over ten shuffles of the assignment order
+  with the signatures held fixed.
+- Section d. Section 4.4 (IOC Validation), on file-level precision at the >= 20 and >= 10
+  cluster sizes, and the Table 4 caption, which limits what the released ground truth
+  reproduces to those two rows.
+- Section e. Table 2 (Section 4.1, threshold sensitivity), whose *Files* column is the
+  *distinct* column of section e.
 
 ## Provenance
 

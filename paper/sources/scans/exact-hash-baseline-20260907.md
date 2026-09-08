@@ -2,15 +2,9 @@
 
 This file reports the exact-hash deduplication baseline of Section 5.2 (Comparison with Simple
 Baselines), recomputed from the archived scan's `file_index` against the pinned corpus snapshot,
-plus two variants (frontmatter stripped; clawhub-archive only). It supports these Section 5.2
-sentences: "SHA-256 hashing all 31,634 SKILL.md files produces 1,946 duplicate groups. Of these,
-71 (3.6%) contain known malicious authors. Hash-based recall for the two primary campaign authors'
-skills is 95.4% (538 of 564 files share at least one exact duplicate), compared to MinHash
-clustering's 98.8%. The 26 files missed by exact hashing (4.6% of the 564) fall into four groups:
-ten differ in version strings, formatting, or a payload URL; eight lack the payload block; seven
-are distinct skills by the same accounts; one differs only in frontmatter." and "An operator
-triaging exact-hash duplicate groups faces a 96.4% false positive rate across 1,946 groups."
-The same figures are tabulated in `paper/sources/baseline-comparisons.md`.
+plus two variants (frontmatter stripped; clawhub-archive only). Section 5.2 reports how many
+duplicate groups SHA-256 hashing produces over the corpus, what share of those groups holds a
+known malicious author, hash-based recall for the two primary campaign authors' skills, the four groups the missed files fall into, and the group-level false positive rate an operator triaging duplicate groups would face. Every hash-side figure is recomputed below; the MinHash recall the paper sets beside them is tabulated, with all of the above, in `paper/sources/baseline-comparisons.md`.
 
 Written by `paper/sources/scans/exact_hash_baseline.py`, which reads the scan named below, the
 corpus tree that LIBRARIAN_CORPUS names, and `paper/iocs.json`; run it with LIBRARIAN_CORPUS set.
@@ -70,7 +64,7 @@ Section 5.2 figures.
   Files come from the archived scan's `file_index`, resolved as `$LIBRARIAN_CORPUS/<marketplace>/<path>` exactly as
   `order_permutation.load_files` does; a path that does not resolve is a skip, never refetched from a bare
   `$LIBRARIAN_CORPUS/<path>` fallback.
-- **Group.** Two or more files sharing one digest. Singletons are not groups, so "1,946 groups" counts 1,946 digests
+- **Group.** Two or more files sharing one digest. Singletons are not groups, so the 1,946 groups are 1,946 digests
   of multiplicity >= 2.
 - **Malicious, for the group figure.** A group counts as containing malicious content when at least one of its files
   is attributed by `file_level_precision.account_of` to one of the 18 `study` accounts (iocs.json

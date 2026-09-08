@@ -2,13 +2,11 @@
 
 This file reports a recompute of the sentence-embedding baseline that Section 5.2
 (Comparison with Simple Baselines) sets beside MinHash and TF-IDF, and that Figure 3
-plots. It supports these Section 5.2 sentences: "We encoded every file that decodes as
-UTF-8 (31,626 of 31,634) with the sentence-transformers model all-MiniLM-L6-v2
-(384-dimensional embeddings, first 2,048 characters per file) and clustered at 0.9 cosine
-similarity. Embeddings produced 3,626 clusters covering 9,462 files (29.9%) with 99.7%
-recall. Precision fell between TF-IDF and MinHash: P@$\geq$20 was 92.9% (13/14) and
-P@$\geq$10 was 62.8% (27/43). Runtime was 924 s (805 s encoding, 119 s clustering),
-three times slower than MinHash." The run reads the archived scan's `file_index` against
+plots. Section 5.2 gives the model, the encoded population, the embedding width, the
+per-file truncation and the 0.9 cosine threshold, then reports the cluster count,
+coverage, recall, precision at the >= 20 and >= 10 cluster sizes, and a wall-clock
+runtime split between encoding and clustering. Every one of those figures is set beside
+its recompute below. The run reads the archived scan's `file_index` against
 the pinned corpus snapshot and writes every recomputed figure beside the published one.
 
 ## Provenance
@@ -54,7 +52,7 @@ HF_HUB_OFFLINE=1 TOKENIZERS_PARALLELISM=false \
 | Greedy clustering | 2.1 |
 | **Total** | **802.2** |
 
-The paper reports one 924 s figure split 805 s encode / 119 s cluster. Its "cluster" number
+The paper reports one 924 s figure split 805 s encode / 119 s cluster. Its clustering figure
 covers similarity and clustering together, so compare it against the sum of the last two
 rows (4.0 s). Runtimes here are not comparable to the published figures: wall time depends on the machine and its load.
 
@@ -115,8 +113,8 @@ are not read by this script and so are not pinned by it.
 
 ## Rules
 
-Section 5.2 gives the model, the population ("every file that decodes as UTF-8 (31,626 of
-31,634)"), the 2,048-character truncation, the 0.9 cosine threshold and the greedy
+Section 5.2 gives the model, the population of files that decode as UTF-8 (31,626 of
+31,634), the 2,048-character truncation, the 0.9 cosine threshold and the greedy
 first-match rule. The remaining rules are stated here in full.
 
 - **Encoded unit.** The first 2048 characters of each file, decoded as UTF-8 with
@@ -201,13 +199,13 @@ discrepancies.
 what the eight files add, and this file names its mode in the provenance table so the two
 cannot be confused.
 
-The "9,462 files (29.9%)" cell can be read as cluster memberships or as distinct files. Here
+The 9,462-file cell (29.9%) can be read as cluster memberships or as distinct files. Here
 memberships are 9,462 and distinct files 9,462; the greedy rule
 only ever assigns an unassigned file, so the two coincide by construction, and the published
 figure is a membership count under a rule that makes it also a file count. (The MinHash side of
 the same sentence differs: the archived scan's 7,147 is a membership count over 7,061 distinct
-files, because MinHash clusters overlap, as the caption of Table 2 states: "memberships run
-higher because clusters overlap (7,147 over 7,061 at 90%)".)
+files, because MinHash clusters overlap; the caption of Table 2 says the same, memberships
+running higher than files at the 90% threshold.)
 
 ## Precision by cluster size
 
@@ -233,13 +231,12 @@ Every MinHash cell recomputes except the recall cell of the printed row: it says
 and the archived scan under this script's own recall rule gives 99.7%
 (351/352).
 
-Both figures are the paper's, and Section 4.4 (IOC Validation) states how they relate: "of
-the 352 scanned, 351 appeared in clusters (99.7% of those scanned; 99.2% against the full
-354)". The 354-denominator form appears in Section 3.3 (Similarity Analysis: "Recall against
-the Koi IOC list held constant at 99.2% across all six thresholds"), in the captions of Table 2
-("is 99.2% at all thresholds; full-list recall is 98.8%") and Figure 1 ("(hightower6eu subset:
-351/354) is invariant at 99.2%"), and in Section 5.2 ("Recall ($\geq$99.2%) is omitted from
-the figure because all methods achieve near-identical values"). The 352-denominator form,
+Both figures are the paper's, and Section 4.4 (IOC Validation) states how they relate: of
+the 352 scanned, 351 appeared in clusters, which is 99.7% of those scanned and 99.2%
+against the full 354. The 354-denominator form is the one Section 3.3 (Similarity Analysis)
+uses for recall across the six thresholds, the one the captions of Table 2 and Figure 1
+carry, and the one Section 5.2 gives where it leaves recall out of Figure 3 because all three
+methods reach near-identical values. The 352-denominator form,
 99.7% (351/352), is the one Table 5 prints for the 3-gram MinHash row.
 
 This script counts recall over the hightower6eu files the loaded corpus holds
