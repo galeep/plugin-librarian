@@ -24,8 +24,8 @@ Output. `order-permutation-<UTC date>.md` beside this script, or the full path
 in SCAN_RESULTS_OUT. A second run on the same UTC day overwrites the day's
 file. The shipped result is `order-permutation-20260907.md`.
 
-`load_files`, `signatures`, `greedy`, `git_head`, `provenance`, `require_corpus`
-and `tilde` are imported by `backup_slug_check.py`, `shingle_ablation.py`,
+`load_files`, `signatures`, `greedy`, `git_head`, `public_repo_head`,
+`provenance`, `require_corpus` and `tilde` are imported by `backup_slug_check.py`, `shingle_ablation.py`,
 `tfidf_comparison.py`, `exact_hash_baseline.py` and `cluster_gap_recompute.py`,
 so those runs resolve the same file list from the same snapshot. Changing them
 changes those results too.
@@ -260,6 +260,36 @@ def git_head(d):
         return "git unavailable"
     except (OSError, subprocess.SubprocessError):
         return "not a git checkout"
+
+PUBLIC_REPO = "plugin-librarian"
+PRIVATE_HISTORY = "<private-history>"
+
+def is_public_repo(d) -> bool:
+    """True when `d` is inside a checkout whose `origin` is the public repository.
+
+    DESIGN RATIONALE: the results files are published, so a rerun inside a
+    private working repository must not write that repository's commit into
+    one. Only the public repository's own history is quotable, so the test is
+    on `origin` rather than on a path, which travels with a clone wherever a
+    reader puts it. The comparison is on the whole final path segment, so a
+    repository whose name merely begins with the public one does not pass it.
+    """
+    url = _git(d, "config", "--get", "remote.origin.url")
+    if not url:
+        return False
+    name = url.strip().rstrip("/").rsplit("/", 1)[-1]
+    if name.endswith(".git"):
+        name = name[:-4]
+    return name == PUBLIC_REPO
+
+def public_repo_head(d) -> str:
+    """`git_head(d)` when `d` is the public repository, else the redaction token.
+
+    Use this for the repository's own HEAD. Corpus and marketplace rows keep
+    `git_head`: those are the pinned upstream repositories the scan read, and
+    their commits are the point of the row.
+    """
+    return git_head(d) if is_public_repo(d) else PRIVATE_HISTORY
 
 def dirty_note(label, d, indexed):
     """Explain a `+dirty` row, with counts computed from the checkout itself.

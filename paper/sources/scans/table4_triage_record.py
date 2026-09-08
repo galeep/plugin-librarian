@@ -78,8 +78,42 @@ def market_codes(clusters):
     return codes
 
 
+PUBLIC_REPO = "plugin-librarian"
+PRIVATE_HISTORY = "<private-history>"
+
+
+def is_public_repo(d) -> bool:
+    """True when `d` is inside a checkout whose `origin` is the public repository.
+
+    Duplicates `order_permutation.is_public_repo`; keep the copies in step.
+    DESIGN RATIONALE: the results files are published, so a rerun inside a
+    private working repository must not write that repository's commit into
+    one. The test is on `origin`, so it travels with a clone, and it compares
+    the whole final path segment, so a repository whose name merely begins
+    with the public one does not pass it.
+    """
+    try:
+        r = subprocess.run(["git", "-C", str(d), "config", "--get", "remote.origin.url"],
+                           capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if r.returncode != 0 or not r.stdout.strip():
+        return False
+    name = r.stdout.strip().rstrip("/").rsplit("/", 1)[-1]
+    if name.endswith(".git"):
+        name = name[:-4]
+    return name == PUBLIC_REPO
+
+
 def head_commit():
-    """Commit the record was generated at, or 'unknown' outside a checkout."""
+    """Commit the record was generated at, or 'unknown' outside a checkout.
+
+    Recorded only when this checkout is the public repository; a run inside a
+    private working repository writes the redaction token instead, because the
+    record is published and that history is not.
+    """
+    if not is_public_repo(REPO):
+        return PRIVATE_HISTORY
     try:
         return subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"], check=True,
                               capture_output=True, text=True).stdout.strip() or "unknown"

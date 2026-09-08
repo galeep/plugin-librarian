@@ -84,11 +84,11 @@ MINOR_POOLS = (
 
 # What Table 3 prints, for the side-by-side paragraphs.
 PRINTED = {
-    "1": ("hightower6eu", 340, "99.8%"),
-    "2": ("sakaen736jih", 204, "~99%"),
-    "3": ("thiagoruss0", 38, "~95%"),
-    "4": ("zaycv, jordanprater", 28, "~97%"),
-    "Minor": ("various", 19, "varies"),
+    "1": ("hightower6eu", 352, "99.8%"),
+    "2": ("sakaen736jih", 212, "99.3%"),
+    "3": ("thiagoruss0", 38, "99.9%"),
+    "4": ("zaycv, jordanprater", 39, "99.9%"),
+    "Minor": ("nine documented accounts", 14, "100%"),
 }
 
 
@@ -352,8 +352,8 @@ def build_report(scan, by_file, iocs, rows, digest, ioc_digest,
         "that reads the second path segment at any depth, and the script stops if the two disagree on any "
         "of them, so no account here loses files to a deeper path.",
         "",
-        "*Files.* Files attributed to the row's account or accounts. Row 3 of the printed table already "
-        "uses this population, and row 4 matches it if that row is read as `zaycv` alone.",
+        "*Files.* Files attributed to the row's account or accounts. This is the population the "
+        "printed table uses: every row of its Files column equals the computed column below.",
         "",
         "*Clustered.* How many of those files appear in the `locations` list of at least one cluster. "
         "*Clusters* is how many distinct clusters hold at least one of them, and *Memb.* is the sum over "
@@ -431,11 +431,12 @@ def build_report(scan, by_file, iocs, rows, digest, ioc_digest,
         "Documented-by entry and stripped of the five that rows 1 to 4 already name. Pool (b) is the "
         "unrestricted remainder of Table 6, which pulls in the four accounts no source documents, one of "
         f"them ({'`mupengi-bot`'}) large enough to dominate the row at 45 files. Pool (c) is pool (a) plus "
-        f"the two smallest undocumented accounts, and it reproduces the printed {PRINTED['Minor'][1]} "
-        f"exactly where pool (a) gives {pool_files['a']:,} and pool (b) gives {pool_files['b']:,}. That "
-        "match is the only thing recommending pool (c): the pool was assembled to land on the printed "
-        "number rather than derived from any rule the paper states, so it is recorded here and not used. "
-        "All three stay in the table above so the reader can see what the choice costs.",
+        "the two smallest undocumented accounts. The printed table names pool (a) in its caption and "
+        f"prints that pool's {pool_files['a']:,} files, where pool (b) gives {pool_files['b']:,} and pool "
+        f"(c) gives {pool_files['c']:,}. Pool (c) is retained only because it reproduces the 19 an "
+        "earlier hand count printed; it was assembled to land on that number rather than derived from "
+        "any rule the paper states. All three stay in the table above so the reader can see what the "
+        "choice costs.",
         "",
         "Three accounts in the chosen pool have no file in the scan's index: `aslaep123`, `gpaitai` and "
         "`danman60`. Table 6 records `gpaitai` and `danman60` as absent from the archive; it records "
@@ -444,48 +445,34 @@ def build_report(scan, by_file, iocs, rows, digest, ioc_digest,
         "",
         "## What the rules reproduce",
         "",
-        "Row 3 of the printed table is what fixes the Files rule, and rows 1, 2 and Minor then do not "
-        "follow it. Under the rule the Files column reads "
-        + ", ".join(f"{by_name[n]['files']:,} {where(n)}" for n in order) + ", against the printed "
-        + ", ".join(f"{PRINTED[n][1]:,} {where(n)}" for n in order) + ".",
+        "The printed Files column is the computed column. Under the rule the Files column reads "
+        + ", ".join(f"{by_name[n]['files']:,} {where(n)}" for n in order) + ", and the printed "
+        "table prints " + ", ".join(f"{PRINTED[n][1]:,} {where(n)}" for n in order) + ".",
         "",
-        f"Row 3 reproduces exactly: printed {PRINTED['3'][1]}, computed {by_name['3']['files']}. Row 4 "
-        f"reproduces only if the row is read as `zaycv` alone, whose {zaycv} files are the printed "
-        f"{PRINTED['4'][1]}; `jordanprater` adds a further {jordan}, so the pooled count under the rule is "
-        f"{by_name['4']['files']} and the printed value leaves no room for the second account. Row 1 does "
-        f"not reproduce: printed {PRINTED['1'][1]}, computed {by_name['1']['files']}. The printed value "
-        f"coincides with the count of `hightower6eu` files in clusters of size at least 10, which is "
-        f"{by_name['1']['gated'][10]} in the alternatives table above, but the coincidence is not sharp: "
-        f"every gate from {sweep_lo} to {sweep_hi} gives the same {by_name['1']['gated'][10]}, so the "
-        "match does not identify a gate of 10 as the rule behind the printed number. Row 2 does not "
-        f"reproduce and no candidate population lands on it: printed {PRINTED['2'][1]}, computed "
-        f"{by_name['2']['files']} attributed, {by_name['2']['clustered']} clustered, "
-        f"{by_name['2']['memberships']} memberships, {by_name['2']['gated'][10]} in clusters of size at "
-        f"least 10, {by_name['2']['gated'][20]} in clusters of size at least 20. The Minor row does not "
-        f"reproduce under the pool it uses: printed {PRINTED['Minor'][1]}, computed "
-        f"{by_name['Minor']['files']} attributed and {by_name['Minor']['clustered']} clustered over the "
-        "nine documented accounts of pool (a). Only pool (c) lands on the printed number, and it lands "
-        "there by construction rather than by a rule the paper states, so the gap stands.",
+        f"Row 4 pools two accounts: `zaycv` contributes {zaycv} files and `jordanprater` a further "
+        f"{jordan}, {by_name['4']['files']} together, which is what that row prints. The Minor row is "
+        "pool (a), the nine documented Table 6 accounts rows 1 to 4 do not name, which the printed "
+        f"caption names and which gives {by_name['Minor']['files']} attributed files, "
+        f"{by_name['Minor']['clustered']} of them clustered.",
         "",
-        "The pairwise statistic reproduces the Sim. column for the two rows the column states precisely. "
-        "Printed against computed pairwise: row 1 "
-        f"{PRINTED['1'][2]} against {fmt_sim(by_name['1']['pair_sim'])}, row 2 {PRINTED['2'][2]} against "
-        f"{fmt_sim(by_name['2']['pair_sim'])}, row 3 {PRINTED['3'][2]} against "
-        f"{fmt_sim(by_name['3']['pair_sim'])}, row 4 {PRINTED['4'][2]} against "
+        "As history, and no longer as a gap. An earlier hand count printed 340, 204, 28 and 19 for rows "
+        "1, 2, 4 and Minor, and none of those four reproduced under this rule. The 340 coincided with "
+        f"the count of `hightower6eu` files in clusters of size at least 10, {by_name['1']['gated'][10]}, "
+        f"but not sharply: every gate from {sweep_lo} to {sweep_hi} gives that same figure, so the match "
+        "identified no gate as the rule behind the number. The 204 matched no candidate population at "
+        "all. The 19 was reached only by pool (c), which had been assembled to land on it. Row 3's 38 "
+        "reproduced then and reproduces now.",
+        "",
+        "The pairwise statistic reproduces the Sim. column for every row. Printed against computed "
+        f"pairwise: row 1 {PRINTED['1'][2]} against {fmt_sim(by_name['1']['pair_sim'])}, row 2 "
+        f"{PRINTED['2'][2]} against {fmt_sim(by_name['2']['pair_sim'])}, row 3 {PRINTED['3'][2]} "
+        f"against {fmt_sim(by_name['3']['pair_sim'])}, row 4 {PRINTED['4'][2]} against "
         f"{fmt_sim(by_name['4']['pair_sim'])}, Minor {PRINTED['Minor'][2]} against "
-        f"{fmt_sim(by_name['Minor']['pair_sim'])}. Row 1 matches the printed value to the printed "
-        "precision and row 2 is consistent with its approximation. Rows 3 and 4 are far above their "
-        "printed approximations, which the membership-weighted cluster statistic does not explain either "
-        f"({fmt_sim(by_name['3']['cluster_sim'])} and {fmt_sim(by_name['4']['cluster_sim'])}).",
-        "",
-        "One observation about rows 3 and 4, offered as a lead and not as a reconstruction. Averaging "
-        "instead over the pairs with exactly one endpoint in the row's accounts gives "
-        f"{fmt_sim(by_name['3']['one_sim'])} for row 3 ({by_name['3']['one_n']:,} pairs) against a printed "
-        f"{PRINTED['3'][2]}, and {fmt_sim(by_name['4']['one_sim'])} for row 4 "
-        f"({by_name['4']['one_n']:,} pairs) against a printed {PRINTED['4'][2]}. Those are the two rows "
-        "whose property is a cross-account or cross-marketplace link, so a March note measuring the link "
-        "rather than the account would land near these values. The two figures fall on opposite sides of "
-        "the two printed ones, so the correspondence is loose and does not settle the definition.",
+        f"{fmt_sim(by_name['Minor']['pair_sim'])}. Each printed value is the computed one at the "
+        "precision the column prints. The membership-weighted cluster statistic is the alternative "
+        f"reading and runs lower ({fmt_sim(by_name['3']['cluster_sim'])} for row 3 and "
+        f"{fmt_sim(by_name['4']['cluster_sim'])} for row 4), so it is not the statistic the column "
+        "uses. The one-endpoint means in the table above are lower again, for the same reason.",
         "",
         "The Clusters column has no counterpart in the printed table. It is reported because Section 4.3 "
         "states a cluster count for row 3 in its prose, and the computed value for that row is "

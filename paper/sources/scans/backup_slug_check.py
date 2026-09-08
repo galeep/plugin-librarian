@@ -51,7 +51,8 @@ sys.path.insert(0, str(HERE.parents[2]))
 
 from datasketch import MinHash, MinHashLSH
 from librarian.core import tokenize, NUM_PERM
-from order_permutation import CORPUS, SCAN, load_files, signatures, greedy, tilde
+from order_permutation import (CORPUS, SCAN, PRIVATE_HISTORY, is_public_repo,
+                               load_files, signatures, greedy, tilde)
 from file_level_precision import account_of, CLAWHUB
 
 THRESHOLD = 0.9
@@ -103,7 +104,14 @@ def self_test() -> int:
 
 
 def repo_head() -> str:
-    """Short HEAD of the repository this script runs from, dirty flag included."""
+    """Short HEAD of the repository this script runs from, dirty flag included.
+
+    Recorded only when this checkout is the public repository; a run inside a
+    private working repository writes the redaction token instead, because the
+    results file is published and that history is not.
+    """
+    if not is_public_repo(HERE):
+        return PRIVATE_HISTORY
     try:
         env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0"}
         r = subprocess.run(["git", "-C", str(HERE), "rev-parse", "--short", "HEAD"],
@@ -123,12 +131,13 @@ def repo_head() -> str:
 def backup_files(entries) -> list:
     """Every SKILL.md under clawhub-archive that the archived scan's filter dropped.
 
-    DESIGN RATIONALE for the substring test rather than the released helper:
+    DESIGN RATIONALE for reproducing the substring test here:
     the rule reproduced here is the one that produced `scan_20260314_...json`,
     `"backup" in str(md_file).lower()` over the absolute path, as
-    `librarian/cli.py` applied it at tool commit b55ceff. The released
-    `librarian.core.is_backup_path` matches on directory names and so drops
-    far fewer files. Using the released helper here would enumerate a
+    `librarian/cli.py` applied it at tool commit b55ceff, and the `librarian/`
+    package released with this artifact still applies it. A later revision of
+    the tool, not part of this release, narrows the test to directory names and
+    so drops far fewer files. Narrowing the test here would enumerate a
     different, smaller set than the one the archived scan excluded, and the
     question being asked is about the archived scan. Matching the substring on
     the marketplace-relative path reproduces the absolute-path test exactly
@@ -241,14 +250,11 @@ def main() -> int:
         "with LIBRARIAN_CORPUS set.",
         f"Generated: {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%SZ')}.",
         "",
-        "This file reports what the backup-path filter excluded from the clustering and "
-        "supports three statements in the paper. Section 3.2, Dataset "
-        "Construction: \"Before that test, the scanner had skipped any path containing "
-        "`backup` (864 files, 780 of them one repository's backup directory).\" Section 4.4, "
-        "IOC Validation: \"Of the 354 slugs, 2 were skipped by the backup-path filter ...; of "
-        "the 352 scanned, 351 appeared in clusters (99.7% of those scanned; 99.2% against the "
-        "full 354).\" Section 6, Limitations: \"the backup-path filter skipped 2 hightower6eu "
-        "skills that, scanned, cluster only with each other.\"",
+        "What the backup-path filter excluded from the clustering. It supports the filter "
+        "description in Section 3.2 (Dataset Construction), the recall chain of Section "
+        "4.4 (IOC Validation) from the 354 recorded slugs down to the 351 that clustered, "
+        "and the note in Section 6 (Limitations) that the filter skipped two hightower6eu "
+        "skills which, once scanned, cluster only with each other.",
         "",
         f"What it measures: for every `SKILL.md` the filter excluded from `{CLAWHUB}`, whether "
         f"the archived index returns any LSH candidate for it at threshold {THRESHOLD}, and "

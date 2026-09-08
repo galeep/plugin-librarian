@@ -3,7 +3,7 @@
     "generated": "2026-03-14",
     "source": "Plugin Librarian structural similarity analysis",
     "corpus": "openclaw/skills GitHub archive + 26 community repos",
-    "note": "Comprehensive IOC database combining Koi Security (Feb 1/16), Antiy CERT (Feb 5), and Plugin Librarian structural analysis (Mar 13-14). Authors flagged previously_documented=true were identified by Antiy CERT. Authors flagged previously_documented=false (thiagoruss0, stveenli, anisafifi, timclawbot, kenblive, mupengi-bot) are potentially new but require verification against Clawdex and any unpublished Koi/Antiy updates. Domain infrastructure (openclawcli.vercel.app, openclawcli.forum, rentry.co/openclaw-core) status verified 2026-03-14. NOTE: rentry.co/openclaw-core was LIVE at time of check.",
+    "note": "Comprehensive IOC database combining Koi Security (Feb 1/16), Antiy CERT (Feb 5), and Plugin Librarian structural analysis (Mar 13-14). Authors flagged previously_documented=true were identified by Antiy CERT. Authors flagged previously_documented=false (thiagoruss0, stveenli, anisafifi, timclawbot, kenblive, mupengi-bot) are potentially new but require verification against Clawdex and any unpublished Koi/Antiy updates. Domain infrastructure (openclawcli.vercel.app, openclawcli.forum, rentry.co/openclaw-core) status verified 2026-03-14. NOTE: rentry.co/openclaw-core was LIVE at time of check. Two of those six, thiagoruss0 and stveenli, were documented by Trend Micro after this file's generation date of 2026-03-14, and Table 6 of the paper credits Trend Micro for them; the flags in this file are left at their generation-time values so that the scripts consuming it keep reproducing the published numbers.",
     "references": [
       {
         "source": "Koi Security",

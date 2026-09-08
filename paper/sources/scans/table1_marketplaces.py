@@ -82,7 +82,36 @@ def without_head_line(text):
                      if not l.startswith(HEAD_LINE_PREFIX))
 
 
+PUBLIC_REPO = "plugin-librarian"
+PRIVATE_HISTORY = "<private-history>"
+
+
+def is_public_repo(d) -> bool:
+    """True when `d` is inside a checkout whose `origin` is the public repository.
+
+    Duplicates `order_permutation.is_public_repo`; keep the copies in step.
+    DESIGN RATIONALE: the results files are published, so a rerun inside a
+    private working repository must not write that repository's commit into
+    one. The test is on `origin`, so it travels with a clone, and it compares
+    the whole final path segment, so a repository whose name merely begins
+    with the public one does not pass it.
+    """
+    try:
+        r = subprocess.run(["git", "-C", str(d), "config", "--get", "remote.origin.url"],
+                           capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if r.returncode != 0 or not r.stdout.strip():
+        return False
+    name = r.stdout.strip().rstrip("/").rsplit("/", 1)[-1]
+    if name.endswith(".git"):
+        name = name[:-4]
+    return name == PUBLIC_REPO
+
+
 def git_head():
+    if not is_public_repo(HERE):
+        return PRIVATE_HISTORY
     try:
         out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(HERE),
                              capture_output=True, text=True, timeout=10)

@@ -40,7 +40,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from datasketch import MinHash, MinHashLSH
 from librarian.core import NUM_PERM, tokenize
 from order_permutation import CORPUS as OP_CORPUS
-from order_permutation import git_head, load_files, provenance, require_corpus, tilde
+from order_permutation import (git_head, load_files, provenance, public_repo_head,
+                               require_corpus, tilde)
 
 THRESHOLD = 0.9
 SHINGLE_SIZES = [2, 3, 4]
@@ -273,7 +274,7 @@ def environment_table(results):
              f"| corpus root | `{tilde(CORPUS)}`"
              + ("" if os.environ.get("LIBRARIAN_CORPUS") else " (LIBRARIAN_CORPUS unset; default)")
              + " |",
-             f"| repository HEAD | {git_head(REPO)} |",
+             f"| repository HEAD | {public_repo_head(REPO)} |",
              f"| input scan | `{SCAN.name}` |",
              f"| ground truth | `{tilde(IOCS)}` |",
              f"| python | {sys.version.split()[0]} ({tilde(sys.executable)}) |",

@@ -5,7 +5,8 @@ Nothing here computes a result. `render()` takes values the run has already prod
 and returns the text of the results file; `embedding_comparison.py` writes it. No CLI:
 importing this module has no side effects beyond the imports.
 
-`tilde`, `_git` and `git_head` duplicate the helpers in `order_permutation.py` rather
+`tilde`, `_git`, `git_head`, `is_public_repo` and `public_repo_head` duplicate the
+helpers in `order_permutation.py` rather
 than importing them, because that module imports datasketch and the embedding run does
 not need it. Keep the two copies in step.
 
@@ -69,6 +70,38 @@ def git_head(d):
         return "git unavailable"
     except (OSError, subprocess.SubprocessError):
         return "not a git checkout"
+
+
+PUBLIC_REPO = "plugin-librarian"
+PRIVATE_HISTORY = "<private-history>"
+
+
+def is_public_repo(d) -> bool:
+    """True when `d` is inside a checkout whose `origin` is the public repository.
+
+    Duplicates `order_permutation.is_public_repo`; keep the copies in step.
+    DESIGN RATIONALE: the results files are published, so a rerun inside a
+    private working repository must not write that repository's commit into
+    one. The test is on `origin`, so it travels with a clone, and it compares
+    the whole final path segment, so a repository whose name merely begins
+    with the public one does not pass it.
+    """
+    try:
+        r = subprocess.run(["git", "-C", str(d), "config", "--get", "remote.origin.url"],
+                           capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if r.returncode != 0 or not r.stdout.strip():
+        return False
+    name = r.stdout.strip().rstrip("/").rsplit("/", 1)[-1]
+    if name.endswith(".git"):
+        name = name[:-4]
+    return name == PUBLIC_REPO
+
+
+def public_repo_head(d) -> str:
+    """`git_head(d)` when `d` is the public repository, else the redaction token."""
+    return git_head(d) if is_public_repo(d) else PRIVATE_HISTORY
 
 
 def model_snapshot(name):
@@ -301,7 +334,7 @@ the pinned corpus snapshot and writes every recomputed figure beside the publish
 | Corpus root | `$LIBRARIAN_CORPUS` |
 | Scan | `{SCAN.name}`, `generated_at` {scan["metadata"]["generated_at"]} |
 | Ground truth | `{iocs_rel}`, `clawhub_authors` ({len(mal_authors)} accounts) |
-| Repository HEAD | {git_head(repo_root)} |
+| Repository HEAD | `{public_repo_head(repo_root)}` |
 | Run at | {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")} |
 
 The package versions in the table are the ones this run used, and the published figures

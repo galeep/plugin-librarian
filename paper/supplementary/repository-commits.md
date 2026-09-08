@@ -1,7 +1,7 @@
 # Repository Commit SHAs
 
 The commit at which each repository of the corpus was cloned, and the
-date of that clone. This is the commit table cited in Appendix C
+date of that commit. This is the commit table cited in Appendix C
 (Reproduction). It also backs the mirror pairs of Section 4.2
 (Marketplace Similarity Matrix), where two pairs of corpus directories
 turn out to be one upstream repository cloned under two names.
@@ -17,8 +17,8 @@ scan commands for the ClawHub archive.
 
 ## Primary Archive
 
-| Repository | Commit SHA | Date |
-|------------|-----------|------|
+| Repository | Commit SHA | Commit date |
+|------------|-----------|-------------|
 | clawhub-archive | 16c991dea171b9f4e785cb2a70dc1ae2ade83396 | 2026-03-13 |
 
 The upstream `openclaw/skills` repository has since been removed from
@@ -35,8 +35,8 @@ exact snapshot listed above and serves it publicly:
 
 ## Community Marketplace Repositories
 
-| Repository | Commit SHA | Date |
-|------------|-----------|------|
+| Repository | Commit SHA | Commit date |
+|------------|-----------|-------------|
 | alirezarezvani-claude-skills | c53f2bcb | 2026-03-13 |
 | ananddtyagi-cc-marketplace | b6433051 | 2026-01-18 |
 | anthropic-agent-skills | b0cbd3df | 2026-03-06 |
@@ -69,8 +69,15 @@ exact snapshot listed above and serves it publicly:
 | side-quest-marketplace | 7f77d7b2 | 2026-03-08 |
 | skills-marketplace | 2482c176 | 2026-01-13 |
 | sundial-awesome-openclaw-skills | b80cde2e | 2026-03-06 |
-| superpowers-marketplace | 646f1d92 | 2026-03-11 |
+| superpowers-marketplace-resolved | 646f1d92 | 2026-03-11 |
 | taskmaster | 2d1211bf | 2026-02-04 |
+
+The row for `superpowers-marketplace-resolved` carries the name the scan
+and Table 1 of the paper use, so that every row here matches a marketplace
+in the archived scans. The directory itself is the resolved tree that the
+`superpowers-marketplace` clone at commit `646f1d92` produces, not a git
+checkout of its own, which is why the marketplace HEAD tables in the
+results files report it as `not a git checkout`.
 
 ## Curated Sub-Repositories
 
@@ -78,8 +85,8 @@ These repositories are nested inside the corpus directory `curated/`,
 each an individually cloned repository. Table 1 of the paper counts
 their files under the single row `curated`.
 
-| Repository | Commit SHA | Date |
-|------------|-----------|------|
+| Repository | Commit SHA | Commit date |
+|------------|-----------|-------------|
 | curated/ai-marketing-skills | 3c48080f | 2026-03-08 |
 | curated/ai-research-skills-orchestra | 0ae58722 | 2026-03-05 |
 | curated/aws-skills | fea94551 | 2026-03-06 |

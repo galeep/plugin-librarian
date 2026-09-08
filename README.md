@@ -46,7 +46,7 @@ The tool reports observable facts about content similarity and location. It does
 ## Paper artifact
 
 The data, scripts and results behind the paper live under `paper/`. Start at
-`paper/README.md`, which maps each file to the sentence it supports and says
-what each script needs. The reproduction commands are in
+`paper/README.md`, which maps each file to the section, table or figure it
+supports and says what each script needs. The reproduction commands are in
 `paper/supplementary/reproduction-steps.md`. The published scan ran with the
 tool at commit `b55ceff`.

@@ -40,11 +40,11 @@ Inputs, all read-only:
                                              section 4 walks it and the content
                                              marker reads file text from it
   paper/main-acm.tex                         optional; not part of the artifact.
-                                             When present, every paper quote is
-                                             verified against it; when absent the
-                                             run prints "paper quotes not
+                                             When present, every section anchor
+                                             is verified against it; when absent
+                                             the run prints "paper quotes not
                                              verified" and continues, and the
-                                             rendered quotes are identical.
+                                             rendered anchors are identical.
 
 Environment:
   LIBRARIAN_CORPUS              required; see above
@@ -77,16 +77,16 @@ results-file citation this script emits is checked at startup against the
 literal it is supposed to point at, and the run aborts if one has moved. A
 stale citation is then a failed run rather than a wrong external document.
 
-DESIGN RATIONALE for PAPER CITATIONS: the paper's tex is not part of the
-artifact, so a line number into it is nothing a reader could check; it is never
-cited by line number here. A paper citation is a
-section number plus a verbatim quote of under twelve words. At generation time
-the quote is located in `paper/main-acm.tex` with whitespace collapsed, so a
-quote may span a line break, and the section number the tex implies is compared
-against the number declared in PAPER_QUOTES; a mismatch on either aborts the run,
-and an absent tex skips the check rather than failing it. The rendered file
-carries only the section number and the quote, so a reader needs no copy of the
-tex to check it, and no line number can go stale in it.
+DESIGN RATIONALE for PAPER ANCHORS: the paper's tex is not part of the artifact,
+so a line number into it is nothing a reader could check; it is never cited by
+line number here. Nor is the paper quoted: every reference to it is a section,
+table or figure number, so that an edit to a paper sentence cannot strand a
+quotation in this file. What a number can still do is move, so at generation
+time each section declared in PAPER_SECTIONS is looked up in
+`paper/main-acm.tex` and its title compared; a mismatch aborts the run, and an
+absent tex skips the check rather than failing it. The rendered file is
+identical either way, because the anchors are literal text rather than
+quotations located in the tex.
 
 Every answer function has a self-test on toy inputs, run before any real input
 is read, so a broken counting rule fails on three hand-checked clusters rather
@@ -180,7 +180,8 @@ RELEASE_BACKUP_RULE = (CORE, 227)
 # Every (file, line, literal) the output file cites, checked at startup.
 # `cite()` refuses to render a (file, line) that is not in this list, so a
 # citation cannot be emitted without also being checked. The paper is not in
-# this list: it is cited by section and quote instead, through `paper_ref`.
+# this list: it is anchored by section, table and figure number instead, and
+# never quoted, so `PAPER_SECTIONS` is what guards those anchors.
 # Every `librarian/` line below is a line of the RELEASED tool, not of the tree
 # this script runs in.
 CITATIONS = [
@@ -204,45 +205,31 @@ CITATIONS = [
     (CLI, 1485, 'content = md_file.read_text(encoding="utf-8", errors="replace")'),
     (CLI, 1486, "if len(content) < 100:"),
     (CLI, 1514, "shingles = tokenize(f.content)"),
-    (SWEEP, 22, "*Recall computed against 354 hightower6eu slugs"),
-    (SWEEP, 23, "337/341 = 98.8%"),
-    (FLP_RESULTS, 88, "cluster-level TP (strict): 11/11; pure 9, mixed 2"),
-    (FLP_RESULTS, 91, "strict: 305/307 = 0.993"),
-    (FLP_RESULTS, 113, "cluster-level TP (strict): 30/38; pure 23, mixed 7"),
-    (FLP_RESULTS, 116, "strict: 557/682 = 0.817"),
+    (SWEEP, 40, "*Recall computed against 354 hightower6eu slugs"),
+    (SWEEP, 42, "337/341 = 98.8%"),
+    (FLP_RESULTS, 90, "cluster-level TP (strict): 11/11; pure 9, mixed 2"),
+    (FLP_RESULTS, 93, "strict: 305/307 = 0.993"),
+    (FLP_RESULTS, 115, "cluster-level TP (strict): 30/38; pure 23, mixed 7"),
+    (FLP_RESULTS, 118, "strict: 557/682 = 0.817"),
 ]
 
 # Every (file, line) `cite()` is allowed to render.
 _PINNED = {(str(path), lineno) for path, lineno, _ in CITATIONS}
 
-# Every paper citation the output file emits, as (declared section, verbatim
-# quote). "abstract" stands for the unnumbered abstract. Each quote must be
-# under twelve words and must occur in the tex, with whitespace collapsed, at a
-# point whose implied section number equals the declared one.
-PAPER_QUOTES = [
-    ("abstract", "all 337 Koi-documented malicious skills present in the corpus"),
-    ("3.4", "We treated the 341 original IOC slugs from the Clawdex database"),
-    ("4.4", "Of the 341 skill slugs in Koi Security's original"),
-    ("4.4", "337 resided in the ClawHub archive"),
-    ("4.4", "narrower hightower6eu subset (354 IOC slugs)"),
-    ("4.4", "of the 352 scanned, 351 appeared in clusters"),
-    ("4.4", "rows reproduce from the released ground truth"),
-    ("4.4", "Precision and recall at cluster size thresholds"),
-    ("3.2", "minimum of 100 characters of content"),
-    ("3.2", "the scanner had skipped any path containing"),
-    ("3.3", "individual words were used as shingles"),
-    ("5.3", "none of these 7 files landed in any cluster"),
-    ("5.3", "motivate pairing it with behavioral scanning"),
-    ("6", "cluster only with each other"),
-    ("abstract", "a within-archive recall expected by construction for template-reuse campaigns"),
+# Every paper section this file points a reader at, as (section number, title).
+# Nothing here quotes the paper: the rendered file anchors by section, table and
+# figure number only, so an edit to a paper sentence cannot strand a reference in
+# it. What can still go stale is a section number, so when the tex is present the
+# check below confirms that each declared number still carries the declared
+# title. "abstract" stands for the unnumbered abstract and has no title to check.
+PAPER_SECTIONS = [
+    ("3.2", "Dataset Construction"),
+    ("3.3", "Similarity Analysis"),
+    ("3.4", "Ground Truth and Validation"),
+    ("4.4", "IOC Validation"),
+    ("5.3", "Implications and Blind Spots"),
+    ("6", "Limitations"),
 ]
-
-MAX_QUOTE_WORDS = 12
-
-# Filled by `check_paper_quotes`, read by `paper_ref`. Empty until then, so a
-# citation cannot be emitted before the guard has run.
-_PAPER_WHERE = {}
-
 
 _RELEASE_CACHE = {}
 
@@ -339,129 +326,66 @@ def cite(path, lineno: int) -> str:
 
 
 # --------------------------------------------------------------------------
-# paper citations: section number plus verbatim quote
+# paper anchors: section number plus section title
 # --------------------------------------------------------------------------
 
-def normalized_with_lines(text: str):
-    """Collapse whitespace per line and join, keeping a source line per character.
-
-    A quote may therefore span a line break in the tex and still be located,
-    which is what lets the quotes read as sentences rather than as fragments of
-    whichever line the tex wraps on.
-    """
-    chars, line_of = [], []
-    for lineno, raw in enumerate(text.splitlines(), start=1):
-        for ch in re.sub(r"\s+", " ", raw).strip():
-            chars.append(ch)
-            line_of.append(lineno)
-        chars.append(" ")
-        line_of.append(lineno)
-    return "".join(chars), line_of
-
-
-def section_labels(text: str) -> dict:
-    """Map each source line to the section number LaTeX would print for it.
+def section_titles(text: str) -> dict:
+    """Map the section number LaTeX would print to the heading's title.
 
     Counts `\\section{` and `\\subsection{` only, so starred headings and the
-    appendix are not numbered here. Lines ahead of the first `\\section` are
-    labeled "abstract".
+    appendix are not numbered here, matching how the paper prints its numbers.
     """
-    labels, sec, sub = {}, 0, 0
-    for lineno, raw in enumerate(text.splitlines(), start=1):
+    titles, sec, sub = {}, 0, 0
+    for raw in text.splitlines():
         stripped = raw.lstrip()
-        if stripped.startswith("\\section{"):
+        m = re.match(r"\\section\{(.*?)\}", stripped)
+        if m:
             sec += 1
             sub = 0
-        elif stripped.startswith("\\subsection{"):
+            titles[str(sec)] = m.group(1)
+            continue
+        m = re.match(r"\\subsection\{(.*?)\}", stripped)
+        if m and sec:
             sub += 1
-        if sec == 0:
-            labels[lineno] = "abstract"
-        else:
-            labels[lineno] = str(sec) if sub == 0 else f"{sec}.{sub}"
-    return labels
+            titles[f"{sec}.{sub}"] = m.group(1)
+    return titles
 
 
 def selftest_paper_refs():
     toy = ("\\begin{abstract}\nalpha beta\n\\end{abstract}\n"
-           "\\section{One}\n\\subsection{A}\ngamma\ndelta\n"
+           "\\section{One}\n\\subsection{A}\ngamma\n"
            "\\subsection{B}\nepsilon\n"
            "\\section{Two}\nzeta\n"
            "\\section*{Unnumbered}\nomega\n")
-    norm, line_of = normalized_with_lines(toy)
-    labels = section_labels(toy)
-
-    def where(quote):
-        return labels[line_of[norm.index(quote)]]
-
-    assert where("alpha beta") == "abstract", where("alpha beta")
-    # "gamma delta" spans a line break in the source and is still found.
-    assert "gamma delta" in norm, norm
-    assert where("gamma delta") == "1.1", where("gamma delta")
-    assert where("epsilon") == "1.2", where("epsilon")
-    assert where("zeta") == "2", where("zeta")
-    # A starred heading does not advance the counter.
-    assert where("omega") == "2", where("omega")
-    # A quote that is not in the text is absent rather than mislocated.
-    assert "theta" not in norm
+    titles = section_titles(toy)
+    assert titles["1"] == "One", titles
+    assert titles["1.1"] == "A", titles
+    assert titles["1.2"] == "B", titles
+    assert titles["2"] == "Two", titles
+    # A starred heading does not advance the counter, so it claims no number.
+    assert "3" not in titles, titles
+    assert check_paper_sections(toy, [("1.1", "A")]) == []
+    assert check_paper_sections(toy, [("1.1", "B")]) != []
+    assert check_paper_sections(toy, [("9.9", "A")]) != []
 
 
-def declare_paper_quotes(quotes=None) -> list:
-    """Fill `_PAPER_WHERE` from the declared sections, without reading the tex.
+def check_paper_sections(text: str, sections=None) -> list:
+    """Return the declared sections whose number or title the tex disagrees with.
 
-    Used when `paper/main-acm.tex` is absent, which is the normal case for a
-    reader of the released artifact: the tex is not part of it. The rendered
-    citations are identical either way, because a verified quote records the
-    section it was found in and that value must equal the declared one for the
-    check to pass. Only the word-length rule, which needs no tex, still applies.
+    Takes the tex source rather than a path so the self-test can exercise it on a
+    toy paper. A reader of the released artifact has no tex, which is why `main`
+    treats an absent one as unverified rather than as a failure.
     """
-    quotes = PAPER_QUOTES if quotes is None else quotes
+    sections = PAPER_SECTIONS if sections is None else sections
+    titles = section_titles(text)
     bad = []
-    for declared, quote in quotes:
-        words = len(quote.split())
-        if words >= MAX_QUOTE_WORDS:
-            bad.append((declared, quote, f"{words} words, must be under {MAX_QUOTE_WORDS}"))
-            continue
-        _PAPER_WHERE[quote] = declared
+    for number, title in sections:
+        found = titles.get(number)
+        if found is None:
+            bad.append((number, title, "no such numbered section in the paper"))
+        elif found != title:
+            bad.append((number, title, f"section {number} is titled {found!r}"))
     return bad
-
-
-def check_paper_quotes(path: Path = PAPER, quotes=None) -> list:
-    """Verify every paper quote, and fill `_PAPER_WHERE` for `paper_ref`.
-
-    Returns the quotes that are too long, missing, or sitting in a different
-    section from the one declared.
-    """
-    quotes = PAPER_QUOTES if quotes is None else quotes
-    text = Path(path).read_text(encoding="utf-8")
-    norm, line_of = normalized_with_lines(text)
-    labels = section_labels(text)
-    bad = []
-    for declared, quote in quotes:
-        words = len(quote.split())
-        if words >= MAX_QUOTE_WORDS:
-            bad.append((declared, quote, f"{words} words, must be under {MAX_QUOTE_WORDS}"))
-            continue
-        at = norm.find(re.sub(r"\s+", " ", quote).strip())
-        if at < 0:
-            bad.append((declared, quote, "not found in the paper"))
-            continue
-        found = labels[line_of[at]]
-        if found != declared:
-            bad.append((declared, quote, f"found in section {found}"))
-            continue
-        _PAPER_WHERE[quote] = found
-    return bad
-
-
-def paper_ref(quote: str) -> str:
-    """Render a paper citation as a section number plus the quote itself."""
-    if quote not in _PAPER_WHERE:
-        raise AssertionError(
-            f"unverified paper quote {quote!r}: add it to PAPER_QUOTES so"
-            " check_paper_quotes verifies it")
-    where = _PAPER_WHERE[quote]
-    label = "the abstract" if where == "abstract" else f"Section {where}"
-    return f'{label}, "{quote}"'
 
 
 # --------------------------------------------------------------------------
@@ -935,21 +859,17 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
 
     a("# Supplementary data tables")
     a("")
-    a(f"Generated {prov['date']}. This file reports five tables computed from material"
-      " already in the artifact: the archived scan, the released ground truth, and the"
-      " pinned March corpus. No new experiment is involved, and no number here depends on"
-      " anything outside those three inputs. Sections 1 and 2 support Table 4 of the paper"
-      f" ({paper_ref('Precision and recall at cluster size thresholds')}) and its caption's"
-      " statement that only the >= 20 and >= 10 rows reproduce from the released ground"
-      f" truth ({paper_ref('rows reproduce from the released ground truth')}). Section 3"
-      " supports the paper's account of the singleton blind spot"
-      f" ({paper_ref('none of these 7 files landed in any cluster')}). Section 4 supports"
-      " the description of the content filter and the tokenizer"
-      f" ({paper_ref('minimum of 100 characters of content')};"
-      f" {paper_ref('individual words were used as shingles')}). Section 5 supports the"
-      f" recall denominators ({paper_ref('of the 352 scanned, 351 appeared in clusters')})"
-      " and the abstract's within-archive recall claim"
-      f" ({paper_ref('all 337 Koi-documented malicious skills present in the corpus')}).")
+    a(f"Generated {prov['date']}. This file reports five tables computed from"
+      " material already in the artifact: the archived scan, the released ground truth, and"
+      " the pinned March corpus. No new experiment is involved, and no number here depends"
+      " on anything outside those three inputs. Sections 1 and 2 support Table 4 (Section"
+      " 4.4, IOC Validation) and its caption's statement that only the >= 20 and >= 10 rows"
+      " reproduce from the released ground truth. Section 3 supports the account of the"
+      " singleton blind spot in Section 5.3 (Implications and Blind Spots). Section 4"
+      " supports the description of the content filter in Section 3.2 (Dataset Construction)"
+      " and of the tokenizer in Section 3.3 (Similarity Analysis). Section 5 supports the"
+      " recall denominators of Section 4.4 and the within-archive recall claim of the"
+      " abstract.")
     a("")
     a("Sources. `scan_20260314_threshold90_skillonly.json` is the archived 90 percent"
       " Jaccard, `SKILL.md`-only scan that every published number rests on."
@@ -958,7 +878,7 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       " `paper/supplementary/repository-commits.md`. Numbers below labeled *computed*"
       f" come from `{prov['script']}`, whose provenance table records the inputs and the"
       " command; numbers labeled with a file and a line are quoted from that line; numbers"
-      " attributed to the paper carry the section number and the sentence they come from,"
+      " attributed to the paper carry the section, table or figure they come from,"
       " so no line number in this file can go stale.")
     a("")
     a("Every `librarian/` line cited below is a line of the **released** tool, the commit"
@@ -993,7 +913,7 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       f" the {len(study)} documented accounts, the {len(antiy)} from Antiy CERT together"
       " with the accounts `iocs.json` records from payload inspection. This is the `study`"
       " rule of `file_level_precision.py`, and it reproduces the published cluster-level"
-      f" figures at >= 20 and >= 10 ({cite(FLP_RESULTS, 88)}, {cite(FLP_RESULTS, 113)}).")
+      f" figures at >= 20 and >= 10 ({cite(FLP_RESULTS, 90)}, {cite(FLP_RESULTS, 115)}).")
     a("")
     a("| cluster size | clusters | true positives | cluster precision | files | attributed"
       " | file precision | pure | mixed |")
@@ -1017,9 +937,8 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       " work in this method, and below 10 it stops working.")
     a("")
     a("Two caveats. First, the bands below 10 are exactly the region the caption of"
-      " Table 4 disclaims: only the >= 20 and >= 10 rows"
-      " reproduce from the released ground truth"
-      f" ({paper_ref('rows reproduce from the released ground truth')}). The hand"
+      " Table 4 disclaims: only the >= 20 and >= 10 rows reproduce from the released"
+      " ground truth (Section 4.4). The hand"
       " triage that produced the published >= 5 row (60 of 163) used a payload-inspection"
       " clause whose per-cluster decisions are not part of the artifact, so the 5-9 band"
       " here, credited by account attribution alone, should be read as a lower bound on"
@@ -1108,7 +1027,7 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       " a hit resting on it alone is the weakest evidence in this section.")
     a("")
     a("**The seven singletons.** These are the `moonshine-100rze` and `anisafifi` files"
-      f" the paper describes ({paper_ref('none of these 7 files landed in any cluster')})."
+      " Section 5.3 describes, none of which landed in any cluster."
       f" All {len(pay['singletons'])} carry a payload indicator,"
       " and every one of them shares at least one indicator with files that did cluster and"
       " that belong to documented accounts.")
@@ -1129,8 +1048,7 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
       " grouping would use, not the grouping itself, and building it properly means deciding"
       " how to weight an indicator and what counts as a link. The indicators cost nothing to"
       " obtain, since they come from the same vendor reports that supply the ground truth, so"
-      " the pairing with behavioral scanning that the paper calls for"
-      f" ({paper_ref('motivate pairing it with behavioral scanning')}) looks reachable"
+      " the pairing with behavioral scanning that Section 5.3 calls for looks reachable"
       " rather than proven.")
     a("")
     a("**What payload grep alone would and would not do.** Run over every unclustered file"
@@ -1282,8 +1200,7 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
     a("")
     a("**A second filter sat ahead of the size test.** The walk skipped any path whose"
       " string contained \"backup\", case-folded, before it read the file"
-      f" ({cite(*RELEASE_BACKUP_RULE)}), as the paper states"
-      f" ({paper_ref('the scanner had skipped any path containing')}). On the pinned"
+      f" ({cite(*RELEASE_BACKUP_RULE)}), as Section 3.2 states. On the pinned"
       " corpus that removes"
       f" {tok['backup_skipped']} `SKILL.md` files from consideration: "
       + ", ".join(f"{n} in `{mp}`" for mp, n in tok["backup_by_marketplace"])
@@ -1332,49 +1249,50 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
     a("|---:|:--|:--|:--|")
     a("| 341 | skill slugs in Koi Security's original ClawHavoc report of 2026-02-01, the"
       " list the paper's headline recall is measured against | **no**, the slug list is"
-      " not in the artifact | "
-      + paper_ref("Of the 341 skill slugs in Koi Security's original") + "; "
-      + paper_ref("We treated the 341 original IOC slugs from the Clawdex database") + " |")
+      " not in the artifact | Section 4.4, on the 341 skill slugs of Koi Security's"
+      " original list; Section 3.4, which takes those 341 original IOC slugs from the"
+      " Clawdex database |")
     a("| 337 | of those 341, the slugs that resided in the ClawHub archive | **no**, it"
-      " needs the 341 list | "
-      + paper_ref("337 resided in the ClawHub archive") + "; " + cite(SWEEP, 23) + " |")
+      " needs the 341 list | Section 4.4, where 337 of them resided in the ClawHub"
+      " archive; " + cite(SWEEP, 42) + " |")
     a(f"| {den['slugs']} | `{IOC_ACCOUNT}` skill slugs recorded in `iocs.json`,"
       f" {den['with_payload']} with a payload and {den['without_payload']} without | yes |"
-      " `paper/iocs.json` `clawhub_authors.hightower6eu`; "
-      + paper_ref("narrower hightower6eu subset (354 IOC slugs)") + " |")
+      " `paper/iocs.json` `clawhub_authors.hightower6eu`; Section 4.4, on the narrower"
+      f" hightower6eu subset of {den['slugs']} IOC slugs |")
     a(f"| {den['present']} | of those {den['slugs']}, the slugs the scan indexed. The"
       f" other {den['slugs'] - den['present']} are on disk and were skipped by the walk's"
-      f" \"backup\" path rule ({cite(*RELEASE_BACKUP_RULE)}), not missing from the snapshot |"
-      " yes | computed; " + paper_ref("of the 352 scanned, 351 appeared in clusters") + " |")
+      f" backup path rule ({cite(*RELEASE_BACKUP_RULE)}), not missing from the snapshot |"
+      f" yes | computed; Section 4.4, where of the {den['present']} scanned,"
+      f" {den['clustered']} appeared in clusters |")
     a(f"| {den['clustered']} | of those {den['present']}, the slugs whose file landed in a"
-      " cluster | yes | computed; "
-      + paper_ref("of the 352 scanned, 351 appeared in clusters") + " |")
+      f" cluster | yes | computed; Section 4.4, where of the {den['present']} scanned,"
+      f" {den['clustered']} appeared in clusters |")
     a("")
     a("**What `iocs.json` does and does not carry.** It carries the Koi reference as"
       f" metadata: the title (\"{den['koi_reference_title']}\"), the URL, the dates, the"
       f" updated count of {den['koi_reference_count']}, and the single account Koi"
       f" documented ({', '.join(den['koi_authors_documented'])}). It does not carry the 341"
       " slugs. The per-skill verdicts sit in Koi's Clawdex database behind a per-skill API"
-      f" ({paper_ref('We treated the 341 original IOC slugs from the Clawdex database')}),"
+      " (Section 3.4, which takes the 341 original IOC slugs from the Clawdex database),"
       " so 341 and 337 cannot be recomputed here, and no attempt is made to reconstruct"
       " them. What the file does carry is two account lists, the"
       f" {den['clawhub_authors']} in `clawhub_authors` and the {len(antiy)} Antiy CERT accounts"
       f" in the reference metadata, {len(study)} in union, together with the"
       f" {den['slugs']} `{IOC_ACCOUNT}` slugs, which is the subset the threshold and"
       " shingle experiments use because those experiments were scoped to one author"
-      f" ({paper_ref('narrower hightower6eu subset (354 IOC slugs)')}).")
+      f" (Section 4.4, on the narrower hightower6eu subset of {den['slugs']} IOC slugs).")
     a("")
     a(f"**The chain from {den['slugs']} to {den['clustered']}.**"
-      f" Two of the {den['slugs']} slugs were skipped by the backup-path filter, as the"
-      f" paper states ({paper_ref('of the 352 scanned, 351 appeared in clusters')}). Both"
+      f" Two of the {den['slugs']} slugs were skipped by the backup-path filter, as"
+      " Section 4.4 states. Both"
       f" ({', '.join('`' + d['slug'] + '`' for d in den['absent_detail'])}) sit in the"
       " pinned corpus at "
       + " and ".join(f"{d['bytes']:,} bytes" for d in den["absent_detail"])
       + ", and the scan never saw them because the walk's rule"
       f" ({cite(*RELEASE_BACKUP_RULE)}) skipped any path containing \"backup\" and both slug"
       " names do. The same rule removes"
-      f" {tok['backup_skipped']} `SKILL.md` files corpus-wide. The paper reports that the"
-      f" two, when scanned, cluster only with each other ({paper_ref('cluster only with each other')}); the"
+      f" {tok['backup_skipped']} `SKILL.md` files corpus-wide. Section 6 (Limitations)"
+      " reports that the two, when scanned, cluster only with each other; the"
       f" point for the denominator table is that {den['slugs'] - den['present']} of the"
       f" {den['slugs']} left the count through the tool's path filter rather than through"
       f" upstream deletion. Of the {den['present']} the scan did index,"
@@ -1385,19 +1303,17 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
     a("")
     a("**How each maps to the abstract's within-archive recall claim.** The abstract"
       " reports that all 337 Koi-documented malicious skills present in the corpus"
-      " appeared in a cluster"
-      f" ({paper_ref('all 337 Koi-documented malicious skills present in the corpus')}),"
-      " so its denominator is 337, the within-archive subset of Koi's 341. It is not 341"
-      f" (recall against the full list is 337/341 = 98.8%, {cite(SWEEP, 23)}) and it is not"
+      " appeared in a cluster, so its denominator is 337, the within-archive subset of Koi's 341. It is not 341"
+      f" (recall against the full list is 337/341 = 98.8%, {cite(SWEEP, 42)}) and it is not"
       f" {den['present']} (the"
       f" `{IOC_ACCOUNT}` subset gives {den['clustered']}/{den['present']} = "
       f"{pct(den['clustered'] / den['present'], 1)} against the slugs the scan indexed, and"
       f" {den['clustered']}/{den['slugs']} = {pct(den['clustered'] / den['slugs'], 1)}"
-      f" against the recorded slugs, {cite(SWEEP, 22)}). Three different denominators"
+      f" against the recorded slugs, {cite(SWEEP, 40)}). Three different denominators"
       " produce three different figures, all of them correct for their own list. The"
       " abstract scopes the 100 percent figure as within-archive recall against Koi's"
-      " 341-slug list on a single template-reuse campaign class"
-      f" ({paper_ref('a within-archive recall expected by construction for template-reuse campaigns')}).")
+      " 341-slug list on a single template-reuse campaign class, a recall it says is"
+      " expected by construction for template-reuse campaigns.")
     a("")
 
     a("## What is not computed here, and why")
@@ -1405,7 +1321,7 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
     a("- Koi's 341-slug list and the 337 present in the archive. The slug list is not in the"
       " artifact. `iocs.json` carries the Koi reference metadata and the account Koi"
       " documented, and the individual verdicts live behind the Clawdex per-skill API"
-      f" ({paper_ref('We treated the 341 original IOC slugs from the Clawdex database')})."
+      " (Section 3.4, which takes the 341 original IOC slugs from that database)."
       " Both figures are quoted from the paper, not recomputed.")
     a("- The published >= 15, >= 5 and all-clusters rows of Table 4."
       " Those record the hand triage of Section 4.4, whose per-cluster decisions are not"
@@ -1469,33 +1385,25 @@ def main() -> int:
           f" {RELEASE_COMMIT[:7]})")
 
     # The paper source is not part of the released artifact, so a reader will not
-    # have it. Verify against it when it is here, and otherwise fall back to the
-    # declared sections, which render identically. The fallback is announced on
-    # stdout and recorded in the output's provenance table, so an unverified run
-    # is never silent.
+    # have it. Verify the section anchors against it when it is here; when it is
+    # absent there is nothing to check, and the rendered file is identical either
+    # way, because the anchors are literal text rather than located quotations.
+    # The unverified case is announced on stdout and recorded in the output's
+    # provenance table, so it is never silent.
     if PAPER.is_file():
-        bad_quotes = check_paper_quotes()
+        bad_sections = check_paper_sections(PAPER.read_text(encoding="utf-8"))
         verified = True
     else:
-        bad_quotes = declare_paper_quotes()
+        bad_sections = []
         verified = False
         print(f"paper quotes not verified: {PAPER.relative_to(REPO)} not present")
-    if bad_quotes:
-        for declared, quote, note in bad_quotes:
-            print(f"bad paper quote for section {declared}: {quote!r}: {note}",
+    if bad_sections:
+        for number, title, note in bad_sections:
+            print(f"bad paper anchor for Section {number} ({title}): {note}",
                   file=sys.stderr)
         return 1
     if verified:
-        # Prove the two modes agree rather than asserting it in a comment: the
-        # declared sections must reproduce exactly what verification recorded.
-        recorded = dict(_PAPER_WHERE)
-        _PAPER_WHERE.clear()
-        declare_paper_quotes()
-        if _PAPER_WHERE != recorded:
-            print(f"declared sections disagree with the paper: {recorded} vs"
-                  f" {dict(_PAPER_WHERE)}", file=sys.stderr)
-            return 1
-        print(f"paper quotes checked ({len(PAPER_QUOTES)} section references)")
+        print(f"paper anchors checked ({len(PAPER_SECTIONS)} section references)")
 
     scan = json.loads(SCAN.read_text())
     iocs = json.loads(IOCS.read_text())
