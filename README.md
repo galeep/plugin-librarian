@@ -42,3 +42,11 @@ Requires Python 3.10+. The init step scans every marketplace you have registered
 The scanner reads every `.md` file across all registered marketplaces, computes word-level MinHash signatures (128 permutations, 3-shingle), and indexes them in a locality-sensitive hash. Queries against this index run in milliseconds. Two files are considered similar at 70%+ estimated Jaccard similarity.
 
 The tool reports observable facts about content similarity and location. It does not make claims about provenance or authorship.
+
+## Paper artifact
+
+The data, scripts and results behind the paper live under `paper/`. Start at
+`paper/README.md`, which maps each file to the section, table or figure it
+supports and says what each script needs. The reproduction commands are in
+`paper/supplementary/reproduction-steps.md`. The published scan ran with the
+tool at commit `b55ceff`.
