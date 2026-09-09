@@ -96,8 +96,8 @@ def self_test():
             raise AssertionError(f"repo_provenance self-test: {url} should be the public repository")
     results.append(f"public origin accepted for {len(public)} URL forms")
 
-    private = ["https://github.com/galeep/plugin-librarian-private",
-               "https://github.com/galeep/plugin-librarian-private.git",
+    private = ["https://github.com/example/plugin-librarian-fork",
+               "https://github.com/example/plugin-librarian-fork.git",
                "https://github.com/galeep/librarian", "", None]
     for url in private:
         if origin_is_public(url):
