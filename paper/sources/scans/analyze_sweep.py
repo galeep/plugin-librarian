@@ -39,16 +39,36 @@ import json
 import sys
 from pathlib import Path
 
-# The eleven attacker accounts of paper/iocs.json (clawhub_authors keys).
-MALICIOUS_AUTHORS = {
-    "hightower6eu", "sakaen736jih", "thiagoruss0", "zaycv",
-    "jordanprater", "stveenli", "anisafifi", "timclawbot",
-    "kenblive", "mupengi-bot", "moonshine-100rze",
-}
-
 # Recall denominator: the 354 hightower6eu slugs recorded in paper/iocs.json
 # (Koi's full list, 341 slugs across all accounts, is reported in Section 4.4).
 IOC_FILE = Path(__file__).parent.parent.parent / "iocs.json"
+
+# The account set the recorded sweep was computed with. paper/iocs.json is the
+# source of truth for the attacker accounts (its clawhub_authors keys); this
+# literal only pins the recorded figures, so an edit to the IOC file that
+# changed the set would stop the run with a message instead of silently
+# reproducing different numbers under the same file name.
+PAPER_MALICIOUS_AUTHORS = frozenset({
+    "hightower6eu", "sakaen736jih", "thiagoruss0", "zaycv",
+    "jordanprater", "stveenli", "anisafifi", "timclawbot",
+    "kenblive", "mupengi-bot", "moonshine-100rze",
+})
+
+
+def load_malicious_authors():
+    """The attacker account set, read from paper/iocs.json and checked against
+    the set the recorded figures were computed with."""
+    with open(IOC_FILE) as f:
+        authors = frozenset(json.load(f)["clawhub_authors"])
+    if authors != PAPER_MALICIOUS_AUTHORS:
+        raise ValueError(
+            "iocs.json clawhub_authors does not match the account set this sweep was "
+            f"recorded with; only in iocs.json: {sorted(authors - PAPER_MALICIOUS_AUTHORS)}; "
+            f"only in the recorded set: {sorted(PAPER_MALICIOUS_AUTHORS - authors)}")
+    return authors
+
+
+MALICIOUS_AUTHORS = load_malicious_authors()
 
 
 def load_ioc_slugs():
