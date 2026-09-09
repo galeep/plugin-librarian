@@ -525,6 +525,12 @@ def preamble(antiy, study, indicators, marker, clusters, is_study, content_all):
     ]
 
 
+def corpus_marketplaces(scan):
+    """Marketplace directories the scan names that are present under the corpus root."""
+    named = sorted({loc["marketplace"] for c in scan["clusters"] for loc in c["locations"]})
+    return named, [m for m in named if (MARKETPLACE_ROOT / m).is_dir()]
+
+
 def main() -> int:
     # Without this the content marker reads nothing, every file lands in
     # unresolved, and the run still exits 0 with a column of quiet zeros.
@@ -535,6 +541,18 @@ def main() -> int:
         return 1
 
     scan = json.loads(SCAN.read_text())
+
+    # A directory that exists but holds none of the marketplaces the scan names is the
+    # same failure one level down: every read misses, the content column is all zeros,
+    # and the run still exits 0. Existence of the root is not evidence that it is the
+    # right root, so the marketplace trees themselves are what the guard tests.
+    named, present = corpus_marketplaces(scan)
+    if not present:
+        print(f"{MARKETPLACE_ROOT} holds none of the {len(named)} marketplace directories "
+              f"the scan names ({', '.join(named[:4])}...); LIBRARIAN_CORPUS is pointing at "
+              "the wrong tree. Every content read would miss and the content column would "
+              "be a column of zeros", file=sys.stderr)
+        return 1
     iocs = json.loads(IOCS.read_text())
     clusters = scan["clusters"]
 

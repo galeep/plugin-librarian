@@ -33,7 +33,8 @@ OUT = Path(__file__).resolve().parents[2] / "supplementary" / "marketplace-simil
 # DESIGN RATIONALE: this file anchors to the paper by section, table and figure
 # number and never quotes its text, so that an edit to a paper sentence cannot
 # strand a quotation here. The section below is restated in this file's own
-# words; `artifact_anchor_check.py` enforces the rule across the bundle.
+# words. The rule holds for every script and results file in the bundle: an
+# anchor survives a rewording of the sentence it points at, a quotation does not.
 
 def main() -> int:
     data = json.loads(SCAN.read_text())

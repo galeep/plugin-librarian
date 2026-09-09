@@ -233,11 +233,12 @@ and the archived scan under this script's own recall rule gives 99.7%
 
 Both figures are the paper's, and Section 4.4 (IOC Validation) states how they relate: of
 the 352 scanned, 351 appeared in clusters, which is 99.7% of those scanned and 99.2%
-against the full 354. The 354-denominator form is the one Section 3.3 (Similarity Analysis)
-uses for recall across the six thresholds, the one the captions of Table 2 and Figure 1
-carry, and the one Section 5.2 gives where it leaves recall out of Figure 3 because all three
-methods reach near-identical values. The 352-denominator form,
-99.7% (351/352), is the one Table 5 prints for the 3-gram MinHash row.
+against the full 354. Section 4.4 is the only place the 354 denominator is used. Section 3.3
+(Similarity Analysis) and the caption of Table 2 both report recall over the hightower6eu
+subset as 99.7%, 351 of the 352 the scan indexed, holding across the six thresholds, and that
+caption gives full-list recall separately at 98.8%. The comparison figure of Section 5.2
+leaves recall out and records only that every method reaches at least 99.7%. The
+352-denominator form, 99.7% (351/352), is the one Table 5 prints for the 3-gram MinHash row.
 
 This script counts recall over the hightower6eu files the loaded corpus holds
 (352), for the embedding row and the MinHash row alike, so its recomputed MinHash

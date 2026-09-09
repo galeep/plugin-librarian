@@ -37,6 +37,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+from repo_provenance import public_repo_head  # noqa: E402
 import file_level_precision as flp  # account_of, payload_indicators, ContentMarker
 
 SCAN, IOCS, CLAWHUB = flp.SCAN, flp.IOCS, flp.CLAWHUB
@@ -112,38 +113,6 @@ def selftest():
     assert table_rows(cells, "x")[0] == "| x | in a cluster | 1 | 1 | 0 | 100.0% |"
     assert flp.account_of({"marketplace": CLAWHUB, "path": "skills/a/s/SKILL.md"}) == "a"
     assert flp.account_of({"marketplace": "other", "path": "skills/a/s/SKILL.md"}) is None
-
-
-PUBLIC_REPO = "plugin-librarian"
-PRIVATE_HISTORY = "<private-history>"
-
-
-def is_public_repo(d) -> bool:
-    """True when `d` is inside a checkout whose `origin` is the public repository.
-
-    Duplicates `order_permutation.is_public_repo`; keep the copies in step.
-    DESIGN RATIONALE: the results files are published, so a rerun inside a
-    private working repository must not write that repository's commit into
-    one. The test is on `origin`, so it travels with a clone, and it compares
-    the whole final path segment, so a repository whose name merely begins
-    with the public one does not pass it.
-    """
-    try:
-        r = subprocess.run(["git", "-C", str(d), "config", "--get", "remote.origin.url"],
-                           capture_output=True, text=True, timeout=30)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    if r.returncode != 0 or not r.stdout.strip():
-        return False
-    name = r.stdout.strip().rstrip("/").rsplit("/", 1)[-1]
-    if name.endswith(".git"):
-        name = name[:-4]
-    return name == PUBLIC_REPO
-
-
-def public_repo_head(d) -> str:
-    """`git_head(d)` when `d` is the public repository, else the redaction token."""
-    return git_head(d) if is_public_repo(d) else PRIVATE_HISTORY
 
 
 def git_head(path) -> str:
@@ -279,7 +248,7 @@ def main() -> int:
         " size-thresholded cluster and which scores clusters, not pattern hits.", "",
         "## Provenance", "", "| item | value |", "|---|---|",
         "| corpus root | `$LIBRARIAN_CORPUS` |", f"| `{CLAWHUB}` HEAD | {git_head(root)} |",
-        f"| repository HEAD | {public_repo_head(HERE)} |", f"| input scan | `{SCAN.name}` |",
+        f"| repository HEAD | `{public_repo_head(HERE)}` |", f"| input scan | `{SCAN.name}` |",
         f"| ground truth | `{IOCS.name}`: {len(study)} accounts, {len(indicators)} indicators |",
         f"| patterns, population rule | `{PATTERN_SOURCE}` (copied verbatim, not re-derived) |",
         "| command | `python paper/sources/scans/rq3_hit_value.py` |",

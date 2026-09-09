@@ -42,7 +42,7 @@ might legitimately give.
 Run, with LIBRARIAN_CORPUS set:
   python paper/sources/scans/backup_slug_check.py
 """
-import datetime, json, os, subprocess, sys, time
+import datetime, json, os, sys, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -51,8 +51,8 @@ sys.path.insert(0, str(HERE.parents[2]))
 
 from datasketch import MinHash, MinHashLSH
 from librarian.core import tokenize, NUM_PERM
-from order_permutation import (CORPUS, SCAN, PRIVATE_HISTORY, is_public_repo,
-                               load_files, signatures, greedy, tilde)
+from order_permutation import CORPUS, SCAN, load_files, signatures, greedy, tilde
+from repo_provenance import public_repo_head
 from file_level_precision import account_of, CLAWHUB
 
 THRESHOLD = 0.9
@@ -101,31 +101,6 @@ def self_test() -> int:
               file=sys.stderr)
         return 1
     return 0
-
-
-def repo_head() -> str:
-    """Short HEAD of the repository this script runs from, dirty flag included.
-
-    Recorded only when this checkout is the public repository; a run inside a
-    private working repository writes the redaction token instead, because the
-    results file is published and that history is not.
-    """
-    if not is_public_repo(HERE):
-        return PRIVATE_HISTORY
-    try:
-        env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0"}
-        r = subprocess.run(["git", "-C", str(HERE), "rev-parse", "--short", "HEAD"],
-                           capture_output=True, text=True, timeout=30, env=env)
-        if r.returncode != 0:
-            return "unknown"
-        head = r.stdout.strip()
-        d = subprocess.run(["git", "-C", str(HERE), "status", "--porcelain"],
-                           capture_output=True, text=True, timeout=30, env=env)
-        if d.returncode != 0:
-            return f"{head}+status unknown"
-        return f"{head}+dirty" if d.stdout.strip() else head
-    except (OSError, subprocess.SubprocessError):
-        return "unknown"
 
 
 def backup_files(entries) -> list:
@@ -244,7 +219,7 @@ def main() -> int:
     lines += [
         f"Corpus root: `{tilde(CORPUS)}`"
         + ("" if os.environ.get("LIBRARIAN_CORPUS") else "  (LIBRARIAN_CORPUS unset; default)"),
-        f"Repository HEAD: `{repo_head()}`",
+        f"Repository HEAD: `{public_repo_head(HERE)}`",
         f"Input scan: `{SCAN.name}` ({n_arch} indexed files).",
         f"Command: `python paper/sources/scans/{Path(__file__).name}` from the repository root, "
         "with LIBRARIAN_CORPUS set.",

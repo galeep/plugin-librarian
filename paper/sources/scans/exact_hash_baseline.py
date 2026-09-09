@@ -32,7 +32,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from file_level_precision import CLAWHUB, account_of          # noqa: E402
-from order_permutation import git_head, public_repo_head, require_corpus, tilde  # noqa: E402
+from order_permutation import git_head, require_corpus, tilde  # noqa: E402
+from repo_provenance import public_repo_head  # noqa: E402
 
 SCAN = HERE / "scan_20260314_threshold90_skillonly.json"
 IOCS = HERE.parents[1] / "iocs.json"
@@ -246,7 +247,7 @@ corpus tree that LIBRARIAN_CORPUS names, and `paper/iocs.json`; run it with LIBR
 
 - Corpus root: `$LIBRARIAN_CORPUS`
 - Scan: `{SCAN.name}`, `generated_at` {scan["metadata"]["generated_at"]}
-- Repository HEAD: {public_repo_head(HERE.parents[2])}
+- Repository HEAD: `{public_repo_head(HERE.parents[2])}`
 - Command: `python paper/sources/scans/{Path(__file__).name}`
 - Run at {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")}, runtime {runtime:.1f}s
 - This file is written before the cross-check against the published figures, so a failing run still

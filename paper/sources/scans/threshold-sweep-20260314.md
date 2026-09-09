@@ -6,10 +6,13 @@ in this directory. The script reads those scans and `paper/iocs.json`; it does n
 read the corpus, so LIBRARIAN_CORPUS is not needed to reproduce this file.
 
 It supports Table 2 and Figure 1 (both Section 4.1, Ecosystem Characterization), and
-the threshold-selection result of Section 3.3 (Similarity Analysis): recall against the
-Koi IOC list holds constant across all six thresholds, while precision at the >= 20
-cluster size reaches 100% only at 90% and above, which is what makes 90% the lowest
-threshold that eliminates false positives for large-cluster triage.
+the threshold-selection result of Section 3.3 (Similarity Analysis): recall over the
+hightower6eu subset holds constant across all six thresholds, while precision at the
+>= 20 cluster size reaches 100% only at 90% and above, which is why 90% is the
+lowest threshold at which large-cluster triage sees no false positive. Section 3.3
+states that recall as 99.7%, 351 of the 352 slugs the scan indexed; the Recall column
+below divides the same 351 by the 354 slugs `paper/iocs.json` records, so it reads
+99.2%. The invariance is the same fact under either denominator.
 
 Column mapping. The Clusters, P@20 and P@10 columns below are Table 2's Clusters,
 P@$\geq$20 and P@$\geq$10 columns. The "In clusters" and "Rate" columns count cluster
@@ -51,7 +54,7 @@ here is not the $\geq$5 row of Table 4.
 
 ## Findings
 
-1. **Recall is threshold-invariant**: 99.2% at all thresholds. The 3 missing
+1. **Recall is threshold-invariant**: 351 of 354 at every threshold, 99.2%. The 3 missing
    slugs are the same in every scan. Section 4.4 accounts for them: 2 are skipped by
    the backup-path filter (Section 3.2), and of the 352 scanned, 351 appear in
    clusters.

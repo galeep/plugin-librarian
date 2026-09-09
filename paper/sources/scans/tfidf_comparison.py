@@ -50,7 +50,9 @@ from sklearn.preprocessing import normalize
 
 # Reused rather than reimplemented so this script and the order-permutation run
 # resolve the same file list from the same snapshot and describe it the same way.
-from order_permutation import git_head, load_files, provenance, public_repo_head, require_corpus
+from order_permutation import git_head, load_files, provenance, require_corpus
+# The published-commit rule, in the one module that holds it.
+from repo_provenance import public_repo_head
 # Only for the equivalence check in check_attribution_rule(); the rule this
 # script scores with is get_author() below.
 from file_level_precision import account_of
@@ -575,7 +577,7 @@ def build_report(scan, texts, metadata, skipped, dropped, clusters, timings,
         f"| machine | {this_machine} |",
         f"| March bench (paper) | {PAPER_MACHINE} |",
         f"| load average at finish (1/5/15 min) | {load_average()} |",
-        f"| paper repository HEAD | {public_repo_head(HERE.parents[2])} |",
+        f"| paper repository HEAD | `{public_repo_head(HERE.parents[2])}` |",
         f"| command | `{command}` |",
         f"| run finished (UTC) | {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')} |",
         f"| vectorize | {timings['vectorise']:.1f} s |",

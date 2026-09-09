@@ -2,9 +2,9 @@
 """Per-claim receipt for the temporal statements about the largest ClawHub campaign.
 
 Thirteen claims are checked one at a time, each against the artifact that makes it:
-the paper's Section 3.3 "Temporal analysis" paragraph, the authors' March working
-notes, which are not part of this artifact, or the Koi Security report, which the
-reader fetches and names with `--koi-capture`. Every claim block carries the
+the paper's Dating paragraph in Section 3.1 (Analysis Timeline), the authors' March
+working notes, which are not part of this artifact, or the Koi Security report, which
+the reader fetches and names with `--koi-capture`. Every claim block carries the
 claim, its location, the method, the exact command or function used, the computed
 result beside the stated value, and a verdict of HOLDS, BREAKS or DEPENDS.
 
@@ -82,6 +82,9 @@ KOI_MISSING = ("no Koi capture given. Fetch " + KOI_URL + " , strip its HTML tag
                "collapse whitespace to a single line, save it locally, and name it with "
                "--koi-capture. Claims 10 to 12 read it; nothing about it ships here.")
 
+ISO_FMT = "%Y-%m-%dT%H:%M:%SZ"
+ISO_Z_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
 ANCHOR = "2026-02-01T00:00:00Z"
 ANCHOR_MARCH = "2026-02-01T08:00:00Z"
 ACCOUNTS = ("skills/hightower6eu/", "skills/sakaen736jih/")
@@ -112,11 +115,56 @@ def kth_time(stamps, k):
     return sorted(stamps)[k - 1]
 
 
+def median_time(stamps):
+    """Median instant of a list of ISO instants ending in Z, or None when empty.
+
+    An even-length list takes the midpoint of the two middle instants, not the upper
+    of the two, and the midpoint is rounded to the nearest second so that the answer
+    is an instant of the same shape as its inputs. When the two middle instants are
+    equal, which is the common case in a bulk publishing run, the midpoint is that
+    instant.
+    """
+    if not stamps:
+        return None
+    ordered = sorted(stamps)
+    n = len(ordered)
+    if n % 2:
+        return ordered[n // 2]
+    lo, hi = ordered[n // 2 - 1], ordered[n // 2]
+    if lo == hi:
+        return lo
+    from datetime import datetime, timedelta, timezone
+    half = timedelta(seconds=round(hours_between(hi, lo) * 1800.0))
+    start = datetime.strptime(lo, ISO_FMT).replace(tzinfo=timezone.utc)
+    return (start + half).strftime(ISO_FMT)
+
+
 def jaccard(a, b):
     """Exact Jaccard of two sets; 0.0 when both are empty."""
     if not a and not b:
         return 0.0
     return len(a & b) / len(a | b)
+
+
+NUMBER_WORDS = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+                "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+                "sixteen", "seventeen", "eighteen", "nineteen", "twenty")
+
+
+def number_word(n):
+    """Small counts as words, larger ones as digits, so counted prose stays computed."""
+    return NUMBER_WORDS[n] if 0 <= n <= 20 else str(n)
+
+
+def is_clique(members, edges):
+    """True when every pair inside `members` carries an edge.
+
+    A connected component can be a chain, so "mutually similar" is a stronger
+    statement than "connected" and is checked rather than assumed.
+    """
+    have = {(min(i, j), max(i, j)) for i, j in edges}
+    return all((min(a, b), max(a, b)) in have
+               for x, a in enumerate(members) for b in members[x + 1:])
 
 
 def components(n, edges):
@@ -161,10 +209,33 @@ def greedy_clusters(n, candidates):
 def hours_between(later_iso, earlier_iso):
     """Signed hours from earlier to later, both ISO instants ending in Z."""
     from datetime import datetime, timezone
-    fmt = "%Y-%m-%dT%H:%M:%SZ"
-    a = datetime.strptime(later_iso, fmt).replace(tzinfo=timezone.utc)
-    b = datetime.strptime(earlier_iso, fmt).replace(tzinfo=timezone.utc)
+    a = datetime.strptime(later_iso, ISO_FMT).replace(tzinfo=timezone.utc)
+    b = datetime.strptime(earlier_iso, ISO_FMT).replace(tzinfo=timezone.utc)
     return (a - b).total_seconds() / 3600.0
+
+
+def check_utc(adds):
+    """Refuse a mirror whose skill first-adds are not recorded in UTC.
+
+    DESIGN RATIONALE: every date rule here (day bucketing, the k-th earliest, the
+    anchor comparison, the hour arithmetic) treats a `git log %aI` string as an
+    instant by comparing or parsing the text, which is only correct while the
+    string ends in Z, that is while the commit's offset is exactly +0000. The
+    assumption held silently before; this states it and names the first path that
+    breaks it. Commits outside `skills/**/SKILL.md` are not checked because no
+    date rule reads them: claim 1 only compares a commit's own author and
+    committer strings with each other.
+    """
+    for path in sorted(adds):
+        if not (path.startswith("skills/") and path.endswith("/SKILL.md")):
+            continue
+        iso = adds[path][0]
+        if not ISO_Z_RE.match(iso):
+            sys.exit(f"the mirror records the first add of {path} as {iso}, which is not"
+                     " a UTC instant of the form YYYY-MM-DDTHH:MM:SSZ. Every date in this"
+                     " receipt compares such strings directly, so a commit with a non-zero"
+                     " UTC offset would be bucketed and ordered by local wall clock. Refusing"
+                     " rather than reporting a date computed that way.")
 
 
 def self_test():
@@ -211,9 +282,38 @@ def self_test():
         print(f"self-test FAILED hours_between: got {got_h}", file=sys.stderr)
         sys.exit(1)
 
+    # Odd length takes the middle element; even length takes the midpoint of the two
+    # middle elements, which is the element itself when the two are equal.
+    med_cases = ((stamps, "2026-02-01T08:38:11Z"),
+                 # 23:03:13 and 08:38:11 are 9 h 34 min 58 s apart; half of that
+                 # past the earlier one is 03:50:42 on the following day.
+                 (stamps[:4], "2026-02-01T03:50:42Z"),
+                 (["2026-02-01T00:00:00Z"] * 4, "2026-02-01T00:00:00Z"),
+                 ([], None))
+    for case, want_m in med_cases:
+        got_m = median_time(case)
+        if got_m != want_m:
+            print(f"self-test FAILED median_time on {len(case)} values: got {got_m}, "
+                  f"want {want_m}", file=sys.stderr)
+            sys.exit(1)
+
+    for n, want_w in ((1, "one"), (6, "six"), (11, "eleven"), (20, "twenty"), (21, "21")):
+        if number_word(n) != want_w:
+            print(f"self-test FAILED number_word({n}): got {number_word(n)}, want {want_w}",
+                  file=sys.stderr)
+            sys.exit(1)
+
+    if not is_clique([0, 1, 2], {(0, 1), (0, 2), (1, 2)}):
+        print("self-test FAILED is_clique: a full triangle is a clique", file=sys.stderr)
+        sys.exit(1)
+    if is_clique([0, 1, 2], {(0, 1), (1, 2)}):
+        print("self-test FAILED is_clique: a chain is not a clique", file=sys.stderr)
+        sys.exit(1)
+
     print("self-test PASS: day buckets 2/2/1, k-th selection on an unsorted list, "
           "Jaccard 1/3, 1.0, 0.0, components of sizes 3, 2, 1, greedy clusters 3 and 2, "
-          "8.9464 h between two instants")
+          "8.9464 h between two instants, medians of a 5-element and a 4-element list, "
+          "number words to twenty, a triangle is a clique and a chain is not")
 
 
 # ------------------------------------------------------------------
@@ -364,9 +464,8 @@ def build_report(d):
       "the exact command or function, the computed result beside the stated value, and "
       "a verdict. Paper claims are cited by section and are paraphrased, not quoted. "
       "Claims first recorded in the authors' March working notes, which are not part of "
-      "this artifact, are marked as such. Koi claims are quoted from the archived "
-      "capture with their character offsets in that file, since the capture is an "
-      "external source.")
+      "this artifact, are marked as such. Koi claims are located in the archived capture "
+      "by character offset and digest and are not quoted.")
     A("")
     A("## Provenance")
     A("")
@@ -398,9 +497,9 @@ def build_report(d):
     A("## Claim 1. The mirror is unshallowed, 70,091 commits, HEAD 16c991de, author date "
       "equals committer date in all but one commit")
     A("")
-    A("**Where.** Section 3.3, Similarity Analysis, for the commit count and the "
-      "unshallowed mirror. The author-versus-committer figure was first recorded in the "
-      "authors' September working notes, which are not part of this artifact.")
+    A("**Where.** Section 3.1, Analysis Timeline, for the commit count and the "
+      "unshallowed mirror. The author-versus-committer comparison is this script's own "
+      "check on the mirror rather than a figure the paper states.")
     A("")
     A("**Method.** Count every commit reachable from HEAD and compare each commit's "
       "author date with its committer date. A shallow clone is detected by the presence "
@@ -502,9 +601,10 @@ def build_report(d):
     A("## Claim 7. The six pre-anchor files form a detectable cluster at the paper's settings")
     A("")
     A("**Where.** " + MARCHNOTE + " They assert that an ingest-time similarity scan "
-      "would have flagged hightower6eu at five files at 23:03 on 2026-01-31. The "
-      "paper's abstract, Section 3.3 and Conclusion rest a pre-disclosure detection "
-      "claim on the same reading.")
+      "would have flagged hightower6eu at five files at 23:03 on 2026-01-31. Beyond "
+      "Section 3.1 (Analysis Timeline) the paper makes one further timing statement, in "
+      "the abstract, and it is hedged: it suggests only that the biggest campaign's "
+      "cluster was still coming together around the time the campaign became public.")
     A("")
     A("**Method.** Two independent readings of the same six files, each file taken at its "
       "own add commit so the content is what existed at the time, not what the March "
@@ -536,6 +636,13 @@ def build_report(d):
     A("")
     for line in d["j6_comp_lines"]:
         A(f"  - {line}")
+    A("")
+    A("Every pair inside the largest of those groups is itself at or above 0.9, so the "
+      "group is mutually similar and not merely connected through intermediates."
+      if d["j6_clique"] else
+      "The largest of those groups is connected but not complete: at least one pair "
+      "inside it falls below 0.9, so it is a connected group rather than a mutually "
+      "similar one, and the count below should be read that way.")
     A("")
     A("Largest mutually similar group as the files arrive, so the state at the instant "
       "the March note names is visible rather than inferred:")
@@ -682,7 +789,8 @@ def build_report(d):
           "where they sit. The sentences are the report's own words and are not "
           "reproduced here; the offsets locate them in the capture a reader fetches.")
         A("")
-        A("**Function.** `offset_at(capture_text, needle, length)`.")
+        A("**Function.** `offset_at(text, key)`, where `key` names one of the recorded "
+          "sentences and the recorded digest verifies it.")
         A("")
         A("**Result.** Two sentences, located but not quoted:")
         A("")
@@ -701,8 +809,8 @@ def build_report(d):
     A("")
 
     # ---- Claim 11
-    A("## Claim 11. How many files in the eleven clusters of 20 or more carry a slug on "
-      "Koi's published list")
+    A(f"## Claim 11. How many files in the {number_word(d['c11_nbig'])} clusters of 20 or "
+      "more carry a slug on Koi's published list")
     A("")
     if not d["koi_ok"]:
         A("**Not run: fetch the capture.** This claim reads the Koi report, which is a "
@@ -711,8 +819,8 @@ def build_report(d):
           "with `--koi-capture`.")
         A("")
     else:
-        A("**Where.** The eleven clusters are the archived scan's clusters of size 20 or "
-          "more, the population behind the paper's headline precision at that threshold. "
+        A(f"**Where.** The {number_word(d['c11_nbig'])} clusters are the archived scan's "
+          "clusters of size 20 or more, the population behind the paper's headline precision at that threshold. "
           "The slug list is the IOC appendix of the Koi capture.")
         A("")
         A("**Method.** Take each cluster member's slug, the directory holding its "
@@ -736,21 +844,47 @@ def build_report(d):
         A("|---:|---:|---|---:|---:|")
         for row in d["c11_rows"]:
             A(f"| {row[0]} | {row[1]} | {row[2]} | {row[3]} | {row[4]:.0f}% |")
-        A(f"| **all eleven** | **{d['c11_total_size']}** | | **{d['c11_total_hit']}** | "
+        A(f"| **all {number_word(d['c11_nbig'])}** | **{d['c11_total_size']}** | | "
+          f"**{d['c11_total_hit']}** | "
           f"**{100 * d['c11_total_hit'] / d['c11_total_size']:.1f}%** |")
         A("")
-        A(f"Restricted to the ten clusters dominated by the largest campaign's account, "
-          f"{d['c11_ht_hit']} of {d['c11_ht_size']} members carry a Koi slug "
+        A(f"Restricted to the {number_word(d['c11_ht_clusters'])} clusters dominated by "
+          f"the largest campaign's account, {d['c11_ht_hit']} of {d['c11_ht_size']} "
+          f"members carry a Koi slug "
           f"({100 * d['c11_ht_hit'] / d['c11_ht_size']:.1f}%).")
         A("")
-        A(f"**Verdict: {d['v11']} on how the sentence is scoped.** Ten of the eleven clusters "
-          f"are between {d['c11_min_share']:.0f}% and {d['c11_max_share']:.0f}% Koi-listed. "
-          f"Cluster {d['c11_zero_id']} is {d['c11_zero_hit']} of {d['c11_zero_size']}: none "
-          "of its members appears on the list at all, and its earliest first-add in the "
-          f"mirror is {d['c11_zero_earliest']}, after the anchor. A sentence saying the files "
-          "forming the campaign's clusters predate disclosure is supportable for the largest "
-          "campaign's ten clusters with the word \"most\", and is not supportable for all "
-          "eleven.")
+        zeros = d["c11_zeros"]
+        # The listed count is the number of clusters that actually carry a share, not
+        # the total less one: several clusters can carry none.
+        n_listed = d["c11_listed"]
+        head = f"**Verdict: {d['v11']} on how the sentence is scoped.** "
+        if n_listed:
+            head += (f"{number_word(n_listed).capitalize()} of the "
+                     f"{number_word(d['c11_nbig'])} clusters are between "
+                     f"{d['c11_min_share']:.0f}% and {d['c11_max_share']:.0f}% Koi-listed. ")
+        else:
+            head += (f"None of the {number_word(d['c11_nbig'])} clusters carries a slug on "
+                     "the list at all, so there is no share to report. ")
+        if zeros:
+            body = ""
+            for cid, hit, size, earliest, unresolved in zeros:
+                body += (f"Cluster {cid} is {hit} of {size}: none of its members appears on "
+                         "the list at all, and its earliest first-add in the mirror is "
+                         f"{earliest}, {'after' if earliest > ANCHOR else 'before'} the "
+                         "anchor")
+                if unresolved:
+                    body += (f", taken over the {size - unresolved} of its {size} members "
+                             f"the mirror dates; {unresolved} have no first add there")
+                body += ". "
+            A(head + body + "A sentence saying the files forming the campaign's clusters "
+              "predate disclosure is supportable for the largest campaign's "
+              f"{number_word(d['c11_ht_clusters'])} clusters with the word \"most\", and "
+              f"is not supportable for all {number_word(d['c11_nbig'])}.")
+        else:
+            A(head + "No cluster of 20 or more is without a listed slug, so the scoping "
+              "the verdict turns on does not arise in this run: the sentence saying the "
+              "files forming the campaign's clusters predate disclosure has no cluster "
+              "here that contradicts it.")
     A("")
 
     # ---- Claim 12
@@ -763,9 +897,10 @@ def build_report(d):
           "with `--koi-capture`.")
         A("")
     else:
-        A("**Where.** This is the mirror-lag evidence. The paper's Section 3.3 paragraph "
-          "asserts mirror lag qualitatively and treats first-commit dates as upper "
-          "bounds on upstream publication; this claim measures the lag.")
+        A("**Where.** This is the mirror-lag evidence. The paper's Dating paragraph in "
+          "Section 3.1 (Analysis Timeline) asserts mirror lag qualitatively and treats "
+          "first-commit dates as upper bounds on upstream publication; this claim "
+          "measures the lag.")
         A("")
         A("**Method.** Every skill Koi listed was live on ClawHub at the audit, and the "
           "audit precedes the 1 February publication. So any listed slug whose mirror "
@@ -813,7 +948,7 @@ def build_report(d):
     A(f"| first file | 2026-01-31 22:34 UTC | {sk[0][0]} (`{slug_of(sk[0][1])}`) |")
     A(f"| minutes before hightower6eu's first | 2 | {60 * hours_between(ht[0][0], sk[0][0]):.1f} |")
     A(f"| files on 2026-01-31 | 11 | {d['sk_jan31']} |")
-    A(f"| bulk publishing resumed | 2026-02-03 | {d['sk_bulk_day']} |")
+    A(f"| bulk publishing resumed | 2026-02-03 | {d['sk_bulk_day_text']} |")
     A(f"| first add after the 2026-01-31 burst | not stated | {d['sk_resume']} |")
     A("")
     A("Per-day breakdown:")
@@ -823,11 +958,15 @@ def build_report(d):
     for day, n in d["sk_days"]:
         A(f"| {day} | {n} |")
     A("")
-    A(f"**Verdict: {d['v13']}.** Every stated figure reproduces. The account published "
-      f"{d['sk_jan31']} files on 2026-01-31 and resumed bulk publishing on "
-      f"{d['sk_bulk_day']}, as the note says. The note omits a trickle of "
-      f"{d['sk_feb1']} file(s) on 2026-02-01, so the pause is not total; the gap between "
-      f"the 2026-01-31 burst and the bulk resumption is {d['sk_gap']:.1f} hours.")
+    A(f"**Verdict: {d['v13']}.** "
+      + ("Every stated figure reproduces. " if d["v13"] == "HOLDS" else
+         "At least one stated figure does not reproduce; the table above is the "
+         "comparison. ")
+      + f"The account published {d['sk_jan31']} files on 2026-01-31 and resumed bulk "
+      f"publishing on {d['sk_bulk_day_text']}. The note omits a trickle of "
+      f"{d['sk_feb1']} file(s) on 2026-02-01, so the pause is not total"
+      + (f"; the gap between the 2026-01-31 burst and the bulk resumption is "
+         f"{d['sk_gap']:.1f} hours." if d["sk_gap"] is not None else "."))
     A("")
 
     # ---- Summary
@@ -889,6 +1028,7 @@ def analyse_group(mirror, rows, tokenize, compute_minhash, MinHashLSH, num_perm)
                        f"{'s' if len(c) != 1 else ''})" for c in comps],
         "comp_sizes": [len(c) for c in comps],
         "max": max(len(c) for c in comps),
+        "max_is_clique": is_clique(comps[0], edges),
         "lsh_rows": [(names[i], "{" + ", ".join(f"`{names[k]}`" for k in sorted(cands[i])) + "}")
                      for i in range(n)],
         "largest_cluster": max((len(c) for c in clusters), default=1),
@@ -931,6 +1071,11 @@ def main():
 
     mirror = Path(args.mirror)
     scan_path = Path(args.scan)
+    if not scan_path.is_file():
+        print(f"no scan JSON at {scan_path}. The archived scans ship beside this script;"
+              " name one with --scan, or leave the option off to read"
+              f" {DEFAULT_SCAN.name}.", file=sys.stderr)
+        sys.exit(1)
     if not (mirror / ".git").exists():
         print(f"no git repository at {mirror}. The unshallowed ClawHub mirror is not"
               " part of this artifact; clone or restore it from the Software Heritage"
@@ -944,6 +1089,7 @@ def main():
     print("reading first-add dates for every path ...")
     adds = first_adds(mirror)
     print(f"  {len(adds):,} paths with a first add")
+    check_utc(adds)
 
     ht = skill_adds(adds, "skills/hightower6eu/")
     sk = skill_adds(adds, "skills/sakaen736jih/")
@@ -954,11 +1100,15 @@ def main():
     ht_feb1 = dict(ht_days).get("2026-02-01", 0)
     sk_jan31 = dict(sk_days).get("2026-01-31", 0)
     sk_feb1 = dict(sk_days).get("2026-02-01", 0)
-    sk_resume = next(r[0] for r in sk if r[0][:10] != "2026-01-31")
+    # Defaults rather than bare next(): an account that never adds outside the opening
+    # day, or never reaches ten adds on a later day, is a reportable state of the mirror
+    # and not a reason to abort mid-run with a StopIteration naming nothing.
+    sk_resume = next((r[0] for r in sk if r[0][:10] != "2026-01-31"), None)
     # "Bulk publishing resumed" is the first day after the opening burst on which the
     # account added at least ten files, which is what the March note's phrase names.
-    sk_bulk_day = next(day for day, n in sk_days if day != "2026-01-31" and n >= 10)
-    sk_bulk_first = next(r[0] for r in sk if r[0][:10] == sk_bulk_day)
+    sk_bulk_day = next((day for day, n in sk_days if day != "2026-01-31" and n >= 10), None)
+    sk_bulk_first = (next((r[0] for r in sk if r[0][:10] == sk_bulk_day), None)
+                     if sk_bulk_day else None)
 
     print("analysing the pre-anchor group and the first ten ...")
     g6 = analyse_group(mirror, ht_pre, tokenize, compute_minhash, MinHashLSH, NUM_PERM)
@@ -995,6 +1145,14 @@ def main():
         camp = auth = back = cred = []
     else:
         camp, auth, back, cred = parse_koi(koi_text)
+        if not camp or not (auth or back or cred):
+            sys.exit("the capture's IOC appendix parsed to no slug-shaped token in at"
+                     f" least one block ({len(camp)} campaign, {len(auth)} auth,"
+                     f" {len(back)} backdoor, {len(cred)} credential). The headers were"
+                     " found but the blocks between them yielded nothing, which is a parse"
+                     " failure and not a result; refusing rather than reporting zero hits"
+                     f" against an empty list. Fetch {KOI_URL} and strip its HTML tags"
+                     " again.")
     koi_campaign = set(camp)
     koi_all = set(camp) | set(auth) | set(back) | set(cred)
 
@@ -1002,8 +1160,8 @@ def main():
     big = sorted((c for c in scan["clusters"] if c["size"] >= 20),
                  key=lambda c: (-c["size"], c["cluster_id"]))
     c11_rows, total_hit, total_size = [], 0, 0
-    ht_hit = ht_size = 0
-    zero = None
+    ht_hit = ht_size = ht_clusters = 0
+    zeros = []
     for c in big:
         slugs = [slug_of(l["path"]) for l in c["locations"]]
         accounts = {}
@@ -1019,10 +1177,21 @@ def main():
         if dominant == "hightower6eu":
             ht_hit += hit
             ht_size += c["size"]
+            ht_clusters += 1
         if hit == 0:
-            earliest = min(adds[l["path"]][0] for l in c["locations"]
-                           if l["path"] in adds)
-            zero = (c["cluster_id"], hit, c["size"], earliest)
+            # Members the mirror does not date are counted rather than dropped: the
+            # earliest first-add below is over the members that resolve, and the
+            # receipt says so when that is fewer than the cluster holds.
+            dated = [adds[l["path"]][0] for l in c["locations"] if l["path"] in adds]
+            if not dated:
+                sys.exit(f"cluster {c['cluster_id']} carries no slug on Koi's list and none "
+                         f"of its {c['size']} members has a first add in {mirror}, so the "
+                         "earliest first-add this claim reports cannot be computed. The "
+                         "mirror and the archived scan disagree on every path in this "
+                         "cluster; check that --mirror names the unshallowed ClawHub "
+                         "mirror the scan was taken from.")
+            zeros.append((c["cluster_id"], hit, c["size"], min(dated),
+                          len(c["locations"]) - len(dated)))
     shares = [r[4] for r in c11_rows if r[3] > 0]
 
     print("resolving Koi slugs against the mirror ...")
@@ -1040,7 +1209,7 @@ def main():
             resolved.append(min(slug_paths[s]))
     resolved.sort()
     pre = [r for r in resolved if r[0] < ANCHOR]
-    median = resolved[len(resolved) // 2] if resolved else None
+    median = median_time([r[0] for r in resolved])
 
     summary = []
     v1 = "HOLDS" if (head.startswith("16c991de") and ncommits == 70091
@@ -1070,12 +1239,16 @@ def main():
         "rows": MinHashLSH(threshold=0.9, num_perm=NUM_PERM).r,
         "ht": ht, "sk": sk, "ht_days": ht_days, "sk_days": sk_days,
         "ht_pre": ht_pre, "ht_feb1": ht_feb1,
-        "sk_jan31": sk_jan31, "sk_feb1": sk_feb1, "sk_resume": sk_resume,
+        "sk_jan31": sk_jan31, "sk_feb1": sk_feb1,
+        "sk_resume": sk_resume or "no add outside 2026-01-31",
         "sk_bulk_day": sk_bulk_day,
-        "sk_gap": hours_between(sk_bulk_first, sk_pre[-1][0]),
+        "sk_bulk_day_text": sk_bulk_day or "no later day reached ten adds",
+        "sk_gap": (hours_between(sk_bulk_first, sk_pre[-1][0])
+                   if sk_bulk_first and sk_pre else None),
         "j6_table": g6["table"], "j6_npairs": len(g6["edges"]),
         "j6_comp_sizes": g6["comp_sizes"], "j6_comp_lines": g6["comp_lines"],
-        "j6_max": g6["max"], "j6_prefix": g6["prefix"], "j10_prefix": g10["prefix"],
+        "j6_max": g6["max"], "j6_clique": g6["max_is_clique"],
+        "j6_prefix": g6["prefix"], "j10_prefix": g10["prefix"],
         "off_fifth_of_group": hours_between(ht[9][0], ANCHOR),
         "l6_rows": g6["lsh_rows"], "l6_clusters": g6["cluster_desc"],
         "l6_largest": g6["largest_cluster"],
@@ -1094,21 +1267,26 @@ def main():
         "koi_twodays": offset_at(koi_text, "twodays"),
         "koi_audit": offset_at(koi_text, "audit"),
         "koi_335": offset_at(koi_text, "campaign"),
-        "koi_ncamp": len(camp) or None,
-        "koi_ntotal": (len(camp) + len(auth) + len(back) + len(cred)) or None,
-        "c11_rows": c11_rows, "c11_total_hit": total_hit, "c11_total_size": total_size,
-        "c11_ht_hit": ht_hit, "c11_ht_size": ht_size,
-        "c11_min_share": min(shares), "c11_max_share": max(shares),
-        "c11_zero_id": zero[0], "c11_zero_hit": zero[1], "c11_zero_size": zero[2],
-        "c11_zero_earliest": zero[3],
+        "koi_ncamp": len(camp),
+        "koi_ntotal": len(camp) + len(auth) + len(back) + len(cred),
+        "c11_rows": c11_rows, "c11_nbig": len(c11_rows),
+        "c11_total_hit": total_hit, "c11_total_size": total_size,
+        "c11_ht_hit": ht_hit, "c11_ht_size": ht_size, "c11_ht_clusters": ht_clusters,
+        # None-safe: `shares` is empty on a run with no capture, where every cluster
+        # scores zero hits, and `zero` is None on a capture that leaves no cluster
+        # without a listed slug. Claims 10 to 12 read these only inside `koi_ok`.
+        "c11_min_share": min(shares) if shares else None,
+        "c11_max_share": max(shares) if shares else None,
+        "c11_listed": len(shares),
+        "c11_zeros": zeros,
         "koi_ok": koi_text is not None,
         "k12_total": len(koi_all), "k12_found": len(resolved), "k12_dupes": dupes,
         "k12_pre": len(pre), "k12_post": len(resolved) - len(pre),
         "k12_earliest": resolved[0] if resolved else None,
         "k12_latest": resolved[-1] if resolved else None,
-        "k12_median": median[0] if median else None,
+        "k12_median": median,
         "k12_latest_off": hours_between(resolved[-1][0], ANCHOR) if resolved else None,
-        "k12_median_off": hours_between(median[0], ANCHOR) if median else None,
+        "k12_median_off": hours_between(median, ANCHOR) if median else None,
         "v1": v1, "v5": v5, "v6": v6, "v7": v7, "v8": v8,
         "v9": "DEPENDS",
         "v10": "HOLDS" if koi_text else "not run",
@@ -1141,11 +1319,12 @@ def main():
         (11, "the clusters' files are Koi-listed",
          "DEPENDS" if koi_text else "not run",
          (f"{total_hit}/{total_size} overall, {ht_hit}/{ht_size} for the largest campaign, "
-          f"{zero[1]}/{zero[2]} for cluster {zero[0]}") if koi_text else "no capture given"),
+          + (", ".join(f"{z[1]}/{z[2]} for cluster {z[0]}" for z in zeros) if zeros
+             else "no cluster without a listed slug")) if koi_text else "no capture given"),
         (12, "the mirror lags upstream publication",
          "HOLDS" if koi_text else "not run",
          (f"{len(resolved) - len(pre)} of {len(resolved)} Koi slugs first appear after the anchor, "
-          f"the last {hours_between(resolved[-1][0], ANCHOR):.1f} h after") if koi_text
+          f"the last {hours_between(resolved[-1][0], ANCHOR):.1f} h after") if koi_text and resolved
          else "no capture given"),
         (13, "sakaen736jih first file, 11 on 2026-01-31, bulk publishing resumed 2026-02-03", v13,
          f"{sk[0][0]}, {sk_jan31} on 2026-01-31, bulk resumption {sk_bulk_day}, "

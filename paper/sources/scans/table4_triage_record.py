@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Per-cluster triage record for Table 4 (precision and recall at cluster size thresholds).
 
-Supports Table 4 in Section 4.4 (IOC Validation), whose caption states that only the >= 20
-and >= 10 rows reproduce from the released ground truth. The true-positive rule is stated in
-Section 3.4 (Ground Truth and Validation): "A true positive is a cluster containing at least
-one file attributed to a documented attacker account (Antiy CERT's 12 authors, Koi IOC slugs,
-or files confirmed through payload inspection)." The >= 20 and >= 10 rows reproduce from the
-account clause alone; the >= 15, >= 5 and all-clusters rows do not. This record lists, for
-every cluster in those three rows, the attributed accounts, the slug hits, and the verdict
-each candidate rule returns, so the rows can be checked against evidence rather than against
-a stored total.
+Supports Table 4 in Section 4.4 (IOC Validation), whose caption limits reproduction
+from the released ground truth to the >= 20 and >= 10 rows. Section 3.4 (Ground Truth and
+Validation) sets the rule: a cluster counts as a true positive once any single file in it can
+be tied to an attacker account some source documents, by one of three routes, an account named
+among Antiy CERT's twelve, a slug on the Clawdex IOC list, or a payload someone inspected. The
+>= 20 and >= 10 rows reproduce from the account clause alone; the >= 15, >= 5 and all-clusters
+rows do not. This record lists, for every cluster in those three rows, the attributed accounts,
+the slug hits, and the verdict each candidate rule returns, so the rows can be checked against
+evidence rather than against a stored total.
 
 Inputs: `scan_20260314_threshold90_skillonly.json` beside this script and `paper/iocs.json`.
 Account attribution is imported from `file_level_precision.py` rather than restated, so the
@@ -18,16 +18,21 @@ function of those two files, and LIBRARIAN_CORPUS is not needed.
 
 Output: `table4-triage-record-20260907.md` beside this script.
 
+Options: --check verifies that file instead of rewriting it, reports a unified diff on a
+mismatch and writes nothing, comparing every line except the recorded commit, which moves
+on every commit and would otherwise fail the check for reasons unrelated to the record.
+
 Run from the repository root:
-  python paper/sources/scans/table4_triage_record.py
+  python paper/sources/scans/table4_triage_record.py [--check]
 """
-import json, subprocess, sys
+import argparse, difflib, json, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from file_level_precision import (  # noqa: E402
     account_of, slug_of, SCAFFOLD_TYPE, TABLE4, CLAWHUB)
+from repo_provenance import public_repo_head  # noqa: E402
 
 SCAN = HERE / "scan_20260314_threshold90_skillonly.json"
 IOCS = HERE.parents[1] / "iocs.json"
@@ -78,49 +83,6 @@ def market_codes(clusters):
     return codes
 
 
-PUBLIC_REPO = "plugin-librarian"
-PRIVATE_HISTORY = "<private-history>"
-
-
-def is_public_repo(d) -> bool:
-    """True when `d` is inside a checkout whose `origin` is the public repository.
-
-    Duplicates `order_permutation.is_public_repo`; keep the copies in step.
-    DESIGN RATIONALE: the results files are published, so a rerun inside a
-    private working repository must not write that repository's commit into
-    one. The test is on `origin`, so it travels with a clone, and it compares
-    the whole final path segment, so a repository whose name merely begins
-    with the public one does not pass it.
-    """
-    try:
-        r = subprocess.run(["git", "-C", str(d), "config", "--get", "remote.origin.url"],
-                           capture_output=True, text=True, timeout=30)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    if r.returncode != 0 or not r.stdout.strip():
-        return False
-    name = r.stdout.strip().rstrip("/").rsplit("/", 1)[-1]
-    if name.endswith(".git"):
-        name = name[:-4]
-    return name == PUBLIC_REPO
-
-
-def head_commit():
-    """Commit the record was generated at, or 'unknown' outside a checkout.
-
-    Recorded only when this checkout is the public repository; a run inside a
-    private working repository writes the redaction token instead, because the
-    record is published and that history is not.
-    """
-    if not is_public_repo(REPO):
-        return PRIVATE_HISTORY
-    try:
-        return subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"], check=True,
-                              capture_output=True, text=True).stdout.strip() or "unknown"
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
-
-
 def row_counts(clusters, study, slugs, threshold):
     """(clusters in row, account TP, account-or-scaffold TP, plus-slug TP, disagreements)."""
     v = [verdicts(c, study, slugs) for c in clusters if threshold is None or c["size"] >= threshold]
@@ -148,13 +110,12 @@ def reconciliation(clusters, study, slugs):
     """What each candidate rule scores on every Table 4 row, against the published count."""
     lines = ["## The three rows that do not reproduce", "", P("""
         `account` is the 18-account study rule of `file_level_precision.py` (Antiy CERT's 12 plus the six
-        further `clawhub_authors` accounts), lifted to clusters by Section 3.4's "at least one file";
+        further `clawhub_authors` accounts), lifted to clusters by Section 3.4's at-least-one-file rule;
         `scaffold` is the scan's own cluster tag (single marketplace, >= 5 files, average similarity >=
         0.98); `inventory slug` is a file whose directory name is one of the 734 slugs `iocs.json`
         inventories under the study's 11 `clawhub_authors`. It stands in for Section 3.4's Koi-slug clause
         because Koi's published 341-slug list is not part of this artifact, and `file_level_precision.py`
-        argues in `cross_check()`, under "What has been ruled out", that "Koi's 341 IOC slugs
-        are not the missing marker"."""), "",
+        argues in `cross_check()` that those 341 slugs are not the marker that would close the gap."""), "",
         "| row | published TP | account | account OR scaffold | account OR scaffold OR inventory"
         " slug | gap under account | gap under account OR scaffold | rules disagree |",
         "|:--|---:|---:|---:|---:|---:|---:|---:|"]
@@ -276,20 +237,34 @@ def how_to_confirm(clusters, study, slugs):
     return lines, len(dis)
 
 
+HEAD_LINE_PREFIX = "Generated by `table4_triage_record.py` at commit"
+
+
+def without_head_line(text):
+    """The record minus its recorded commit, which moves on every commit."""
+    return "\n".join(l for l in text.splitlines() if not l.startswith(HEAD_LINE_PREFIX))
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Recompute the Table 4 per-cluster triage record from the archived scan.")
+    parser.add_argument("--check", action="store_true",
+                        help="verify the existing record instead of rewriting it")
+    args = parser.parse_args()
     self_test()
     scan = json.loads(SCAN.read_text(encoding="utf-8"))
     iocs = json.loads(IOCS.read_text(encoding="utf-8"))
-    commit, clusters = head_commit(), scan["clusters"]
+    commit, clusters = public_repo_head(REPO), scan["clusters"]
     antiy, study, slugs = load_ground_truth(iocs)
     codes = market_codes(clusters)
     header = ["# Table 4 per-cluster triage record", "", P("""
-        This file supports Table 4 of the paper (Section 4.4, IOC Validation), whose caption states that
-        only the >= 20 and >= 10 rows reproduce from the released ground truth. It lists every cluster in
+        This file supports Table 4 of the paper (Section 4.4, IOC Validation), whose caption limits
+        reproduction from the released ground truth to the >= 20 and >= 10 rows. It lists every cluster in
         the three rows that do not (>= 15, >= 5 and all clusters) with the evidence each candidate rule
-        finds, under the true-positive rule of Section 3.4 (Ground Truth and Validation): "A true positive
-        is a cluster containing at least one file attributed to a documented attacker account (Antiy CERT's
-        12 authors, Koi IOC slugs, or files confirmed through payload inspection)." The published rows come
+        finds, under the true-positive rule Section 3.4 (Ground Truth and Validation) sets: a cluster
+        counts once any single file in it can be tied to an attacker account some source documents, by
+        one of three routes, an account named among Antiy CERT's twelve, a slug on the Clawdex IOC list,
+        or a payload someone inspected. The published rows come
         from the hand triage Section 4.4 describes, whose per-cluster decisions are not part of the released
         ground truth; a verdict here is what a candidate rule returns, not a record of that triage."""), "",
         f"Generated by `{Path(__file__).name}` at commit `{commit}`. Regenerate from the repository"
@@ -313,7 +288,19 @@ def main() -> int:
     stats = {"ge5_disagree": counts["disagree"], "ge5_residual": counts["residual"],
              "ge5_undisputed": counts[""], "confirm_first": n_dis, **small}
     lines = header + reconciliation(clusters, study, slugs) + tables + confirm
-    OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    record = "\n".join(lines) + "\n"
+    if args.check:
+        existing = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
+        if without_head_line(existing) == without_head_line(record):
+            print(f"{OUT.name} matches recomputation "
+                  "(the recorded commit is excluded from the comparison)")
+            return 0
+        sys.stdout.writelines(difflib.unified_diff(
+            without_head_line(existing).splitlines(keepends=True),
+            without_head_line(record).splitlines(keepends=True),
+            fromfile=OUT.name, tofile="recomputed"))
+        return 1
+    OUT.write_text(record, encoding="utf-8")
     print(f"wrote {OUT.relative_to(REPO)}: " + ", ".join(f"{k} {v}" for k, v in stats.items()))
     return 0
 

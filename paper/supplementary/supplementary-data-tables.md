@@ -14,10 +14,10 @@ Every `librarian/` line cited below is a line of the **released** tool, the comm
 | released tool | `b55ceff1fde1ef0678a62067d7e0a6cdac852b3e` |
 | repository commit | `<private-history>` |
 | script | `paper/sources/scans/supplementary_data_tables.py` |
-| paper quotes | not verified: `paper/main-acm.tex` not present |
+| paper section anchors | not verified: `paper/main-acm.tex` not present |
 | command | `python paper/sources/scans/supplementary_data_tables.py` |
 
-The command runs with `LIBRARIAN_CORPUS` set to a checkout pinned to the snapshot the paper used and with `SUPP_TABLES_REDACT_HISTORY=1`, which renders the repository commit row as the placeholder above; `python` is any Python 3.10 or later interpreter with the repository root importable.
+The command runs with `LIBRARIAN_CORPUS` set to a checkout pinned to the snapshot the paper used; `python` is any Python 3.10 or later interpreter with the repository root importable. The repository commit row above records a real hash only when the run happens inside a checkout of this artifact's public repository, and the redaction token otherwise, which is the rule `paper/sources/scans/repo_provenance.py` holds for every emitter in the bundle.
 
 ## 1. Precision by cluster size band
 

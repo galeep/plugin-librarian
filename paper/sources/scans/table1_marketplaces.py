@@ -30,11 +30,13 @@ Run from the repository root (LIBRARIAN_CORPUS is not needed):
 import argparse
 import collections
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from repo_provenance import public_repo_head  # noqa: E402
+
 SCAN = HERE / "scan_20260314_threshold90_skillonly.json"
 OUT = HERE / "table1-marketplaces-20260907.md"
 SMALL_THRESHOLD = 50
@@ -80,45 +82,6 @@ def without_head_line(text):
     """The report minus its recorded git HEAD, which moves on every commit."""
     return "\n".join(l for l in text.splitlines()
                      if not l.startswith(HEAD_LINE_PREFIX))
-
-
-PUBLIC_REPO = "plugin-librarian"
-PRIVATE_HISTORY = "<private-history>"
-
-
-def is_public_repo(d) -> bool:
-    """True when `d` is inside a checkout whose `origin` is the public repository.
-
-    Duplicates `order_permutation.is_public_repo`; keep the copies in step.
-    DESIGN RATIONALE: the results files are published, so a rerun inside a
-    private working repository must not write that repository's commit into
-    one. The test is on `origin`, so it travels with a clone, and it compares
-    the whole final path segment, so a repository whose name merely begins
-    with the public one does not pass it.
-    """
-    try:
-        r = subprocess.run(["git", "-C", str(d), "config", "--get", "remote.origin.url"],
-                           capture_output=True, text=True, timeout=30)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    if r.returncode != 0 or not r.stdout.strip():
-        return False
-    name = r.stdout.strip().rstrip("/").rsplit("/", 1)[-1]
-    if name.endswith(".git"):
-        name = name[:-4]
-    return name == PUBLIC_REPO
-
-
-def git_head():
-    if not is_public_repo(HERE):
-        return PRIVATE_HISTORY
-    try:
-        out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(HERE),
-                             capture_output=True, text=True, timeout=10)
-    except (OSError, subprocess.SubprocessError) as exc:
-        return f"unavailable ({exc})"
-    return (out.stdout.strip() if out.returncode == 0
-            else f"unavailable (git rev-parse exited {out.returncode})")
 
 
 def self_test():
@@ -179,7 +142,7 @@ def build_report(scan, rows, extra, pooled, ordered_named):
         f"- Input `metadata.generated_at`: {scan['metadata']['generated_at']}",
         "- Command: `python paper/sources/scans/table1_marketplaces.py`"
         " (run from the repository root)",
-        f"{HEAD_LINE_PREFIX} `{git_head()}`",
+        f"{HEAD_LINE_PREFIX} `{public_repo_head(HERE)}`",
         f"- Aggregation rule: a repository is named when it holds at least"
         f" {SMALL_THRESHOLD} files; the rest pool into one row.",
         "",

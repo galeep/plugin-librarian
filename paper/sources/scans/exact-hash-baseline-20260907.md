@@ -13,7 +13,7 @@ corpus tree that LIBRARIAN_CORPUS names, and `paper/iocs.json`; run it with LIBR
 
 - Corpus root: `$LIBRARIAN_CORPUS`
 - Scan: `scan_20260314_threshold90_skillonly.json`, `generated_at` 2026-03-14T18:10:26.003911+00:00
-- Repository HEAD: <private-history>
+- Repository HEAD: `<private-history>`
 - Command: `python paper/sources/scans/exact_hash_baseline.py`
 - Run at 2026-09-07T03:04:06+00:00, runtime 17.9s
 - This file is written before the cross-check against the published figures, so a failing run still

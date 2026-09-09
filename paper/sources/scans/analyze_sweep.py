@@ -7,11 +7,12 @@ beside this script and reports, per threshold: total clusters, cluster membershi
 cluster size thresholds >=5, >=10, >=15 and >=20, recall against the hightower6eu skill
 slugs, and scaffold cluster counts.
 
-Supports Table 2 (Section 4.1, "Threshold sensitivity on 31,634 \texttt{SKILL.md}
-files.") and Figure 1 (Section 4.1, "P@$\geq$20 and P@$\geq$10 versus Jaccard
-threshold."), and the sentence in Section 3.3: "Recall against the Koi IOC list held
-constant at 99.2\% across all six thresholds, confirming that malicious campaigns
-cluster well above the 70\% floor." The Clusters, P@>=20 and P@>=10 columns of Table 2
+Supports Table 2 and Figure 1 (both Section 4.1, Ecosystem Characterization) and the
+threshold-selection result of Section 3.3 (Similarity Analysis), which reports recall
+over the hightower6eu subset holding constant across all six thresholds. Section 3.3
+states that recall over the 352 slugs the scan indexed; the Recall column here divides
+the same numerator by the 354 slugs `paper/iocs.json` records, so the two differ in
+denominator and agree on the invariance. The Clusters, P@>=20 and P@>=10 columns of Table 2
 are this script's Clusters, P@20 and P@10. Table 2's Files and % columns count distinct
 clustered files (7,061 at 90%), which `table2_distinct_files.py` computes; this script's
 "In clusters" and "Rate" columns count memberships (7,147 and 22.6% at 90%), which run

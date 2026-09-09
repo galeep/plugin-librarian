@@ -59,6 +59,10 @@ import time
 from collections import namedtuple
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from repo_provenance import public_repo_head  # noqa: E402
+
+
 def require_corpus():
     """Corpus root from LIBRARIAN_CORPUS, or exit; there is no default.
 
@@ -232,33 +236,6 @@ def _git(d, *args):
     return out.stdout.strip() if out.returncode == 0 else None
 
 
-PUBLIC_REPO = "plugin-librarian"
-PRIVATE_HISTORY = "<private-history>"
-
-
-def is_public_repo(d) -> bool:
-    """True when `d` is inside a checkout whose `origin` is the public repository.
-
-    Duplicates `order_permutation.is_public_repo`; keep the copies in step.
-    DESIGN RATIONALE: the results files are published, so a rerun inside a
-    private working repository must not write that repository's commit into
-    one. The test is on `origin`, so it travels with a clone, and it compares
-    the whole final path segment, so a repository whose name merely begins
-    with the public one does not pass it.
-    """
-    try:
-        r = subprocess.run(["git", "-C", str(d), "config", "--get", "remote.origin.url"],
-                           capture_output=True, text=True, timeout=30)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    if r.returncode != 0 or not r.stdout.strip():
-        return False
-    name = r.stdout.strip().rstrip("/").rsplit("/", 1)[-1]
-    if name.endswith(".git"):
-        name = name[:-4]
-    return name == PUBLIC_REPO
-
-
 def git_head(d):
     """Short HEAD of the checkout rooted exactly at `d`, else a reason string.
 
@@ -276,16 +253,6 @@ def git_head(d):
         return "not a git checkout"
     dirty = _git(d, "status", "--porcelain")
     return head + ("+dirty" if dirty else "")
-
-
-def public_repo_head(d) -> str:
-    """`git_head(d)` when `d` is the public repository, else the redaction token.
-
-    Use this for the repository's own HEAD. Corpus and marketplace rows keep
-    `git_head`: those are the pinned upstream repositories the scan read, and
-    their commits are the point of the row.
-    """
-    return git_head(d) if is_public_repo(d) else PRIVATE_HISTORY
 
 
 def dirty_count(d):

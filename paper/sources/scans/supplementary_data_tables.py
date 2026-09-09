@@ -6,24 +6,23 @@ each supports (section numbers follow the order of the paper's section and
 subsection headings; table numbers follow caption order):
 
   1. Precision by cluster size band, at cluster and file level. Supports
-     Table 4, "Precision and recall at cluster size thresholds", and the
-     caption's statement that only the >= 20 and >= 10 rows reproduce from
-     the released ground truth (Section 4.4).
+     Table 4 (Section 4.4, IOC Validation), the precision and recall table
+     at cluster size thresholds, and its caption's limit of reproduction
+     from the released ground truth to the >= 20 and >= 10 rows.
   2. Benign content inside attributed clusters: how much unattributed content
      sits inside the clusters credited as true positives (Table 4 again, read
      from the operator's side).
-  3. Payload-indicator recall for the seven unclustered files of Section 5.3,
-     "none of these 7 files landed in any cluster": would a grep for the
-     iocs.json payload indicators have found what clustering found, and what
-     would it add?
+  3. Payload-indicator recall for the seven unclustered files Section 5.3
+     reports as landing in no cluster: would a grep for the iocs.json payload
+     indicators have found what clustering found, and what would it add?
   4. Filter effects: whether the tokenizer includes the YAML frontmatter,
      whether the 100-character filter applies before or after tokenization,
      and whether an indexed document can be shorter than three words
-     (Section 3.2, "minimum of 100 characters of content"; Section 3.3,
-     "individual words were used as shingles").
+     (Section 3.2 for the 100-character content minimum; Section 3.3 for the
+     rule that shingles a document shorter than three words by single word).
   5. Populations and denominators: the 341 / 354 / 352 / 351 / 337 counts and
-     how each maps to the abstract's within-archive recall claim (Section 4.4,
-     "of the 352 scanned, 351 appeared in clusters").
+     how each maps to the abstract's within-archive recall claim, which
+     Section 4.4 states as 351 of the 352 scanned appearing in clusters.
 
 Inputs, all read-only:
   scan_20260314_threshold90_skillonly.json   the archived scan, beside this script
@@ -42,9 +41,9 @@ Inputs, all read-only:
   paper/main-acm.tex                         optional; not part of the artifact.
                                              When present, every section anchor
                                              is verified against it; when absent
-                                             the run prints "paper quotes not
-                                             verified" and continues, and the
-                                             rendered anchors are identical.
+                                             the run says so on stdout and in the
+                                             provenance table and continues, and
+                                             the rendered anchors are identical.
 
 Environment:
   LIBRARIAN_CORPUS              required; see above
@@ -52,13 +51,13 @@ Environment:
                                 released `librarian/` bytes; RELEASE_BLOBS is the
                                 authority, so a ref carrying different code is
                                 refused
-  SUPP_TABLES_REDACT_HISTORY=1  render the repository commit row as a
-                                placeholder, which is the released rendering
 
 Output: paper/supplementary/supplementary-data-tables.md, overwritten each run.
-Nothing here edits the paper.
+Nothing here edits the paper. The repository commit row records a real hash only
+inside a checkout of the artifact's public repository, and `<private-history>`
+otherwise; `repo_provenance.py` holds that rule for every emitter here.
 
-Run, with LIBRARIAN_CORPUS set and SUPP_TABLES_REDACT_HISTORY=1:
+Run, with LIBRARIAN_CORPUS set:
   python paper/sources/scans/supplementary_data_tables.py
 
 The "backup" path rule. The released tool skips any path whose string contains
@@ -108,6 +107,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO))   # for `librarian.core`, imported inside the self-test
 
 import file_level_precision as FLP  # noqa: E402  (path set above)
+from repo_provenance import public_repo_head  # noqa: E402
 
 SCAN = HERE / "scan_20260314_threshold90_skillonly.json"
 IOCS = REPO / "paper" / "iocs.json"
@@ -142,11 +142,11 @@ RELEASE_BLOBS = {
     CLI: "96cfd205e1f971fdc4f02b7cdcb16589f3b7f7778c15ca9c18ffcb9f53080ba3",
 }
 
-# The repository commit this run was made from. It names a commit only someone
-# with that history can resolve, so the released copy renders a placeholder.
-# Set SUPP_TABLES_REDACT_HISTORY=1 to produce the released rendering.
-HISTORY_PLACEHOLDER = "<private-history>"
-REDACT_HISTORY = os.environ.get("SUPP_TABLES_REDACT_HISTORY") == "1"
+# The repository commit this run was made from. It names a commit only someone with
+# that history can resolve, so a real hash is recorded only when this checkout is the
+# artifact's own public repository and the redaction token otherwise. The rule lives
+# in repo_provenance.py, with every other emitter here, rather than in an opt-in
+# environment variable a reader could simply not set.
 
 CORPUS = Path(os.path.expanduser(os.environ.get("LIBRARIAN_CORPUS", ""))) if os.environ.get(
     "LIBRARIAN_CORPUS") else None
@@ -892,13 +892,15 @@ def render(prov, tok, den, pay, band, ben, study, antiy) -> list:
     a(f"| released tool | `{prov['release']}` |")
     a(f"| repository commit | `{prov['head']}` |")
     a(f"| script | `{prov['script']}` |")
-    a(f"| paper quotes | {prov['quotes']} |")
+    a(f"| paper section anchors | {prov['anchors']} |")
     a(f"| command | `{prov['command']}` |")
     a("")
     a("The command runs with `LIBRARIAN_CORPUS` set to a checkout pinned to the snapshot"
-      " the paper used and with `SUPP_TABLES_REDACT_HISTORY=1`, which renders the"
-      f" repository commit row as the placeholder above; `{PYTHON_PLACEHOLDER}` is any"
-      " Python 3.10 or later interpreter with the repository root importable.")
+      f" the paper used; `{PYTHON_PLACEHOLDER}` is any Python 3.10 or later interpreter"
+      " with the repository root importable. The repository commit row above records a"
+      " real hash only when the run happens inside a checkout of this artifact's public"
+      " repository, and the redaction token otherwise, which is the rule"
+      " `paper/sources/scans/repo_provenance.py` holds for every emitter in the bundle.")
     a("")
 
     # ---------------- section 1 ----------------
@@ -1348,14 +1350,6 @@ SELF_TESTS = (
 )
 
 
-def git_head() -> str:
-    try:
-        return subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"],
-                              capture_output=True, text=True, check=True).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
-
-
 def main() -> int:
     for name, test in SELF_TESTS:
         try:
@@ -1374,6 +1368,16 @@ def main() -> int:
         print(f"file_level_precision resolved its corpus to {FLP.MARKETPLACE_ROOT}, not"
               f" {CORPUS}; the imported content marker would read a different tree",
               file=sys.stderr)
+        return 1
+    # A root that exists but holds none of the marketplaces the scan names walks to
+    # nothing: the cross-checks below cover scan-derived numbers only, so they would
+    # still report as passed over a corpus that yielded not one file.
+    scan_named = sorted({loc["marketplace"] for c in json.loads(SCAN.read_text())["clusters"]
+                         for loc in c["locations"]})
+    if not [m for m in scan_named if (CORPUS / m).is_dir()]:
+        print(f"{CORPUS} holds none of the {len(scan_named)} marketplace directories the"
+              f" scan names ({', '.join(scan_named[:4])}...); LIBRARIAN_CORPUS is pointing"
+              " at the wrong tree, and section 4 would walk nothing", file=sys.stderr)
         return 1
 
     stale = check_citations()
@@ -1396,7 +1400,7 @@ def main() -> int:
     else:
         bad_sections = []
         verified = False
-        print(f"paper quotes not verified: {PAPER.relative_to(REPO)} not present")
+        print(f"paper section anchors not verified: {PAPER.relative_to(REPO)} not present")
     if bad_sections:
         for number, title, note in bad_sections:
             print(f"bad paper anchor for Section {number} ({title}): {note}",
@@ -1461,10 +1465,10 @@ def main() -> int:
         "scan": SCAN.name,
         "iocs": str(IOCS.relative_to(REPO)),
         "corpus": CORPUS_PLACEHOLDER,
-        "head": HISTORY_PLACEHOLDER if REDACT_HISTORY else git_head(),
+        "head": public_repo_head(REPO),
         "release": RELEASE_COMMIT,
-        "quotes": ("verified against `paper/main-acm.tex`" if verified
-                   else "not verified: `paper/main-acm.tex` not present"),
+        "anchors": ("verified against `paper/main-acm.tex`" if verified
+                    else "not verified: `paper/main-acm.tex` not present"),
         "command": f"{PYTHON_PLACEHOLDER} {Path(__file__).resolve().relative_to(REPO)}",
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)

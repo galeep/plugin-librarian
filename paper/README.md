@@ -36,10 +36,13 @@ Warning: `paper/iocs.json` and the tables in `paper/supplementary/` reproduce li
 2. Export `LIBRARIAN_CORPUS` pointing at a corpus checkout laid out as the
    *Corpus checkout* section below describes. Several scripts need no corpus at
    all; *Pinning the corpus* names them.
-3. Run one of those, `python paper/sources/scans/table1_marketplaces.py`, and
-   compare its output with the shipped
-   `paper/sources/scans/table1-marketplaces-20260907.md`. That script also
-   takes `--check`, which verifies the shipped file instead of rewriting it.
+3. Run one of those in its verifying mode:
+   `python paper/sources/scans/table1_marketplaces.py --check`. That prints the
+   recomputed table and compares it against the shipped
+   `paper/sources/scans/table1-marketplaces-20260907.md` without rewriting it,
+   exiting non-zero on any difference except the recorded repository HEAD, which
+   moves on every commit. Running the script without `--check` overwrites the
+   shipped file in place, so there is nothing left to compare it with.
 
 ## Artifact claims
 
@@ -60,7 +63,7 @@ records about runtime and inputs. Runtimes are wall time on whichever machine ra
 | Figure 2 (Section 4.1) | Cluster size distribution at the 90% threshold | `paper/figures/generate_cluster_distribution.py` | No image ships; the generator reads `scan_20260314_threshold90_skillonly.json` and writes `cluster-distribution.pdf` and `.png` beside itself, identical bytes on two runs | Not recorded; needs `matplotlib` and `numpy`, no corpus |
 | Figure 3 (Section 5.2) | Precision and runtime of MinHash, TF-IDF and sentence embeddings | `paper/figures/generate_figures.py` | No image ships; the plotted series are literals in the script, the Section 5.2 values that `paper/sources/baseline-comparisons.md` summarizes and that `tfidf_comparison.py` and `embedding_comparison.py` recompute | Not recorded for the generator, which needs `matplotlib` and `numpy` and no corpus; the two baselines are the rows below |
 | Section 3.3 | Seed and order robustness of the clustering | `paper/sources/scans/seed_robustness.py`, `paper/sources/scans/order_permutation.py`, `paper/sources/scans/recompute_ari.py` | `seed-robustness-20260907.md`, `order-permutation-20260907.md`, `recompute-ari-results-20260907.json`, and `reproduction-20260907.md` for the run as a whole | Not recorded; all three need the pinned corpus. `recompute_ari.py` recomputes the Adjusted Rand Index between two clusterings |
-| Section 3.3, Dating figures | The temporal statements about the largest ClawHub campaign: first-add instants, the counts per day, and whether the pre-disclosure files would have clustered at the paper's settings | `paper/sources/scans/temporal_receipt.py` | `paper/sources/scans/temporal-receipt-20260908.md`, thirteen claims each with its method, command, computed value and verdict | Not recorded. A full run walks the unshallowed ClawHub mirror, which is not part of this artifact; Software Heritage serves the snapshot the paper cites, and `--mirror` names the checkout. The archived scan is in the bundle. Claims 10 to 12 read the Koi Security report, which is a third party's page: neither it nor any parse of it is part of this artifact, and the reader fetches it from the Wayback Machine at `https://web.archive.org/web/20260306131006id_/https://www.koi.ai/blog/clawhavoc-341-malicious-clawedbot-skills-found-by-the-bot-they-were-targeting` and names the local file with `--koi-capture`; without it those three claims are reported as not run. `--check` verifies the results file instead of rewriting it |
+| Section 3.1, Dating figures | The temporal statements about the largest ClawHub campaign: first-add instants, the counts per day, and whether the pre-disclosure files would have clustered at the paper's settings | `paper/sources/scans/temporal_receipt.py` | `paper/sources/scans/temporal-receipt-20260908.md`, thirteen claims each with its method, command, computed value and verdict | Not recorded. A full run walks the unshallowed ClawHub mirror, which is not part of this artifact; Software Heritage serves the snapshot the paper cites, and `--mirror` names the checkout. The archived scan is in the bundle. Claims 10 to 12 read the Koi Security report, which is a third party's page: neither it nor any parse of it is part of this artifact, and the reader fetches it from the Wayback Machine at `https://web.archive.org/web/20260306131006id_/https://www.koi.ai/blog/clawhavoc-341-malicious-clawedbot-skills-found-by-the-bot-they-were-targeting` and names the local file with `--koi-capture`; without it those three claims are reported as not run. `--check` verifies the results file instead of rewriting it |
 | Sections 3.2, 4.4 and 6 | The backup-path filter and what it excluded from the clustering | `paper/sources/scans/backup_slug_check.py` | `backup-slug-check-20260907.md` | 603 s; needs the pinned corpus |
 | Section 3.6 | The artifact and its reproduction commands are described in Appendix C | none | `paper/supplementary/reproduction-steps.md`, with every script in `paper/sources/scans/` and `paper/figures/` and the dated results files beside them | Not recorded; the scan commands need a corpus checkout |
 | Section 4.1 | The reported 90% clustering figures come from the archived scan, which a rebuild from the pinned corpus reproduces | `paper/sources/scans/cluster_gap_recompute.py` | `reproduction-20260907.md`, section a; the script reports on stdout and writes no results file | Not recorded; needs the pinned corpus |
@@ -115,11 +118,15 @@ is the file's path inside that repository as the archived scan's
 Provenance rows in the results files give the corpus root as
 `$LIBRARIAN_CORPUS`, the command as `python paper/sources/scans/<script>.py`
 run from the repository root with `LIBRARIAN_CORPUS` set, and the
-repository HEAD as `<private-history>`. That last token is a redaction: it
-stands for a commit in the authors' private working repository, which is
-not part of this artifact and cannot be resolved from this one. The corpus
-is pinned by `paper/supplementary/repository-commits.md`, not by any
-repository HEAD.
+repository HEAD as either a commit of this repository or the token
+`<private-history>`. A real hash is recorded only when the script runs inside a
+checkout whose `origin` remote is this artifact's own public repository, so that
+the commit it names is one a reader can resolve; `paper/sources/scans/repo_provenance.py`
+is the single place that rule lives. Every other case, a private working
+repository included, records `<private-history>`, a redaction standing for a
+commit that is not part of this artifact and cannot be resolved from it. The
+shipped results files carry the token. The corpus is pinned by
+`paper/supplementary/repository-commits.md`, not by any repository HEAD.
 
 The ClawHub archive was cloned on 2026-03-13 at commit `16c991de`. That
 upstream repository has since been removed from GitHub, but Software
@@ -132,9 +139,10 @@ marketplaces are in `paper/supplementary/repository-commits.md`; check each
 sub-clone out at its recorded SHA rather than at whatever its default
 branch now points to.
 
-Four scripts read only the archived scan JSON and `iocs.json` and need
+Five scripts read only the archived scan JSON and `iocs.json` and need
 no corpus at all: `analyze_sweep.py`, `marketplace_matrix.py`,
-`table1_marketplaces.py` and `table2_distinct_files.py`. `table4_triage_record.py` computes every
+`table1_marketplaces.py`, `table2_distinct_files.py` and
+`table3_campaigns.py`. `table4_triage_record.py` computes every
 figure it reports from the scan and `iocs.json` as well; it imports
 `file_level_precision.py` for the attribution rule.
 `file_level_precision.py` needs a corpus only for its exploratory
@@ -185,11 +193,12 @@ requires; none of the four is a dependency of the package.
 
 | Script | Needs beyond the standard library |
 |---|---|
-| `order_permutation.py`, `seed_robustness.py`, `recompute_ari.py`, `shingle_ablation.py`, `backup_slug_check.py`, `cluster_gap_recompute.py`, `exact_hash_baseline.py` | `datasketch`, plus the `librarian` package, which `pip install -e .` at the repository root provides |
+| `order_permutation.py`, `seed_robustness.py`, `recompute_ari.py`, `shingle_ablation.py`, `backup_slug_check.py`, `cluster_gap_recompute.py`, `exact_hash_baseline.py`, `temporal_receipt.py` | `datasketch`, plus the `librarian` package, which `pip install -e .` at the repository root provides |
 | `tfidf_comparison.py` | `scikit-learn`, plus `datasketch` and the `librarian` package through its import of `order_permutation.py` |
 | `embedding_comparison.py`, `embedding_comparison_report.py` | `sentence-transformers` and `torch`, imported lazily inside the run |
 | `paper/figures/generate_figures.py`, `paper/figures/generate_cluster_distribution.py` | `matplotlib`, `numpy` |
-| `analyze_sweep.py`, `behavioral_scan.py`, `file_level_precision.py`, `marketplace_matrix.py`, `rq3_hit_value.py`, `table1_marketplaces.py`, `table2_distinct_files.py`, `table4_triage_record.py` | standard library only, though several import a sibling script in this directory |
+| `analyze_sweep.py`, `behavioral_scan.py`, `file_level_precision.py`, `marketplace_matrix.py`, `rq3_hit_value.py`, `table1_marketplaces.py`, `table2_distinct_files.py`, `table3_campaigns.py`, `table4_triage_record.py` | standard library only, though several import a sibling script in this directory |
+| `repo_provenance.py` | standard library only; a helper module rather than a script, holding the one test that decides whether a results file may record this checkout's commit |
 | `supplementary_data_tables.py` | the `librarian` package (imports `librarian.core` for the tokenizer) and `file_level_precision.py` |
 
 `embedding_comparison.py` needs `sentence-transformers`, which brings torch.
@@ -206,12 +215,13 @@ overwrites the dated file shipped here; set `SCAN_RESULTS_OUT` to a full
 path to direct a rerun somewhere specific. `recompute_ari.py` takes an
 `OUT_SUFFIX` instead, and the shipped
 `recompute-ari-results-20260907.json` was written with
-`OUT_SUFFIX=-20260907`. The scripts that read only the archived scans
-(`table1_marketplaces.py`, `table2_distinct_files.py`,
-`table4_triage_record.py`, `marketplace_matrix.py` and
-`supplementary_data_tables.py`) write the shipped file name and overwrite
-it in place; `table1_marketplaces.py` and `table2_distinct_files.py` take
-`--check` to verify the shipped file instead. `analyze_sweep.py` and
+`OUT_SUFFIX=-20260907`. Six scripts write the shipped file name and
+overwrite it in place: `table1_marketplaces.py`, `table2_distinct_files.py`,
+`table3_campaigns.py`, `table4_triage_record.py`, `temporal_receipt.py` and
+`marketplace_matrix.py`, of which the first five take `--check` to verify the
+shipped file instead of rewriting it. `supplementary_data_tables.py` also
+writes a fixed name in place, and it needs the pinned corpus rather than the
+archived scans alone. `analyze_sweep.py` and
 `cluster_gap_recompute.py` report on stdout and write no results file;
 `cluster_gap_recompute.py` leaves `sigs.pkl` and `clusterings.pkl`
 intermediates in `CLUSTER_GAP_OUT` (default: the current directory),

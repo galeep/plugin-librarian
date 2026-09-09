@@ -5,10 +5,11 @@ Nothing here computes a result. `render()` takes values the run has already prod
 and returns the text of the results file; `embedding_comparison.py` writes it. No CLI:
 importing this module has no side effects beyond the imports.
 
-`tilde`, `_git`, `git_head`, `is_public_repo` and `public_repo_head` duplicate the
-helpers in `order_permutation.py` rather
-than importing them, because that module imports datasketch and the embedding run does
-not need it. Keep the two copies in step.
+`tilde`, `_git` and `git_head` duplicate the helpers in `order_permutation.py`
+rather than importing them, because that module imports datasketch and the embedding
+run does not need it. Keep the two copies in step. The published-commit rule is not
+duplicated: `public_repo_head` comes from `repo_provenance.py`, which is standard
+library only.
 
 `git_head` reports the short HEAD of the checkout rooted exactly at the given
 directory, or a reason string; `model_snapshot` reports the cached Hugging Face
@@ -20,6 +21,9 @@ import os
 import sys
 from pathlib import Path
 import subprocess
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from repo_provenance import public_repo_head  # noqa: E402
 
 
 # --------------------------------------------------------------------------
@@ -70,38 +74,6 @@ def git_head(d):
         return "git unavailable"
     except (OSError, subprocess.SubprocessError):
         return "not a git checkout"
-
-
-PUBLIC_REPO = "plugin-librarian"
-PRIVATE_HISTORY = "<private-history>"
-
-
-def is_public_repo(d) -> bool:
-    """True when `d` is inside a checkout whose `origin` is the public repository.
-
-    Duplicates `order_permutation.is_public_repo`; keep the copies in step.
-    DESIGN RATIONALE: the results files are published, so a rerun inside a
-    private working repository must not write that repository's commit into
-    one. The test is on `origin`, so it travels with a clone, and it compares
-    the whole final path segment, so a repository whose name merely begins
-    with the public one does not pass it.
-    """
-    try:
-        r = subprocess.run(["git", "-C", str(d), "config", "--get", "remote.origin.url"],
-                           capture_output=True, text=True, timeout=30)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    if r.returncode != 0 or not r.stdout.strip():
-        return False
-    name = r.stdout.strip().rstrip("/").rsplit("/", 1)[-1]
-    if name.endswith(".git"):
-        name = name[:-4]
-    return name == PUBLIC_REPO
-
-
-def public_repo_head(d) -> str:
-    """`git_head(d)` when `d` is the public repository, else the redaction token."""
-    return git_head(d) if is_public_repo(d) else PRIVATE_HISTORY
 
 
 def model_snapshot(name):
@@ -489,14 +461,14 @@ Every MinHash cell recomputes except the recall cell of the printed row: it says
 and the archived scan under this script's own recall rule gives {mh["recall"]:.1f}%
 ({mh["recall_hit"]:,}/{mh["recall_tot"]:,}).
 
-Both figures are the paper's, and Section 4.4 (IOC Validation) states how they relate: "of
-the 352 scanned, 351 appeared in clusters (99.7% of those scanned; 99.2% against the full
-354)". The 354-denominator form appears in Section 3.3 (Similarity Analysis: "Recall against
-the Koi IOC list held constant at 99.2% across all six thresholds"), in the captions of Table 2
-("is 99.2% at all thresholds; full-list recall is 98.8%") and Figure 1 ("(hightower6eu subset:
-351/354) is invariant at 99.2%"), and in Section 5.2 ("Recall ($\\geq$99.2%) is omitted from
-the figure because all methods achieve near-identical values"). The 352-denominator form,
-99.7% (351/352), is the one Table 5 prints for the 3-gram MinHash row.
+Both figures are the paper's, and Section 4.4 (IOC Validation) states how they relate: of
+the 352 scanned, 351 appeared in clusters, which is 99.7% of those scanned and 99.2%
+against the full 354. Section 4.4 is the only place the 354 denominator is used. Section 3.3
+(Similarity Analysis) and the caption of Table 2 both report recall over the hightower6eu
+subset as 99.7%, 351 of the 352 the scan indexed, holding across the six thresholds, and that
+caption gives full-list recall separately at 98.8%. The comparison figure of Section 5.2
+leaves recall out and records only that every method reaches at least 99.7%. The
+352-denominator form, 99.7% (351/352), is the one Table 5 prints for the 3-gram MinHash row.
 
 This script counts recall over the hightower6eu files the loaded corpus holds
 ({h6_total:,}), for the embedding row and the MinHash row alike, so its recomputed MinHash
